@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
     Container,
@@ -15,9 +15,19 @@ import {
     Chip,
 } from '@mui/material';
 import { CloudUpload, Description } from '@mui/icons-material';
-import { uploadBill, getHospitals } from '../services/api';
+import { uploadBill } from '../services/api';
 import { ACCEPTED_FILE_TYPES, MAX_FILE_SIZE } from '../constants/stages';
 import { formatFileSize, isValidFileType } from '../utils/helpers';
+
+// Predefined list of hospitals
+const HOSPITALS = [
+    { id: 'apollo', name: 'Apollo Hospital' },
+    { id: 'fortis', name: 'Fortis Hospital' },
+    { id: 'manipal', name: 'Manipal Hospital' },
+    { id: 'max', name: 'Max Healthcare' },
+    { id: 'medanta', name: 'Medanta Hospital' },
+    { id: 'narayana', name: 'Narayana Hospital' },
+];
 
 /**
  * Upload Page Component
@@ -29,29 +39,9 @@ const UploadPage = () => {
     // State management
     const [selectedFile, setSelectedFile] = useState(null);
     const [selectedHospital, setSelectedHospital] = useState('');
-    const [hospitals, setHospitals] = useState([]);
     const [loading, setLoading] = useState(false);
-    const [loadingHospitals, setLoadingHospitals] = useState(true);
     const [error, setError] = useState(null);
     const [fileError, setFileError] = useState(null);
-
-    // Fetch hospitals on component mount
-    useEffect(() => {
-        const fetchHospitals = async () => {
-            try {
-                setLoadingHospitals(true);
-                const data = await getHospitals();
-                setHospitals(data);
-            } catch (err) {
-                console.error('Error fetching hospitals:', err);
-                setError('Failed to load hospitals. Please refresh the page.');
-            } finally {
-                setLoadingHospitals(false);
-            }
-        };
-
-        fetchHospitals();
-    }, []);
 
     // Handle file selection
     const handleFileChange = (event) => {
@@ -148,22 +138,13 @@ const UploadPage = () => {
                             value={selectedHospital}
                             label="Select Hospital"
                             onChange={(e) => setSelectedHospital(e.target.value)}
-                            disabled={loadingHospitals || loading}
+                            disabled={loading}
                         >
-                            {loadingHospitals ? (
-                                <MenuItem disabled>
-                                    <CircularProgress size={20} sx={{ mr: 1 }} />
-                                    Loading hospitals...
+                            {HOSPITALS.map((hospital) => (
+                                <MenuItem key={hospital.id} value={hospital.name}>
+                                    {hospital.name}
                                 </MenuItem>
-                            ) : hospitals.length === 0 ? (
-                                <MenuItem disabled>No hospitals available</MenuItem>
-                            ) : (
-                                hospitals.map((hospital) => (
-                                    <MenuItem key={hospital.id} value={hospital.name}>
-                                        {hospital.name}
-                                    </MenuItem>
-                                ))
-                            )}
+                            ))}
                         </Select>
                     </FormControl>
 
