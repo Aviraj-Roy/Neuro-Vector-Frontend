@@ -100,7 +100,7 @@ server: {
 ```
 
 **How it works:**
-- Frontend makes request to: `/api/upload`
+- Frontend makes request to: `api/upload`
 - Vite proxies to: `http://localhost:8001/upload`
 - This avoids CORS issues during development
 

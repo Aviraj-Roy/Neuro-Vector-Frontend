@@ -92,16 +92,22 @@ const UploadPage = () => {
             // Upload bill
             const response = await uploadBill(selectedFile, selectedHospital);
             console.log('Upload response:', response);
+            const billId = response.billId || response.upload_id || response.uploadId;
 
             // Navigate to status page with billId
-            if (response.billId) {
-                navigate(`/status/${response.billId}`);
+            if (billId) {
+                navigate(`/status/${billId}`);
             } else {
-                setError('Upload succeeded but no billId was returned.');
+                setError('Upload succeeded but no bill identifier was returned.');
             }
         } catch (err) {
             console.error('Upload error:', err);
-            setError(err.response?.data?.message || err.message || 'Failed to upload bill. Please try again.');
+            setError(
+                err.response?.data?.message
+                || err.response?.data?.detail
+                || err.message
+                || 'Failed to upload bill. Please try again.'
+            );
         } finally {
             setLoading(false);
         }
@@ -235,7 +241,7 @@ const UploadPage = () => {
                 {/* Info Box */}
                 <Box sx={{ mt: 4, p: 2, backgroundColor: 'info.lighter', borderRadius: 2 }}>
                     <Typography variant="body2" color="text.secondary">
-                        <strong>Note:</strong> After uploading, you'll be redirected to the status page where you can track
+                        <strong>Note:</strong> After uploading, you&apos;ll be redirected to the status page where you can track
                         the verification progress in real-time.
                     </Typography>
                 </Box>

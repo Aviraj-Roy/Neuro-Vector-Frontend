@@ -41,7 +41,12 @@ export const useBillPolling = (billId, enabled = true) => {
         } catch (err) {
             if (isMountedRef.current) {
                 console.error('Error fetching bill status:', err);
-                setError(err.response?.data?.message || err.message || 'Failed to fetch status');
+                setError(
+                    err.response?.data?.message
+                    || err.response?.data?.detail
+                    || err.message
+                    || 'Failed to fetch status'
+                );
             }
         } finally {
             if (isMountedRef.current) {

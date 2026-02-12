@@ -57,7 +57,12 @@ const BillLookupPage = () => {
             setBillData(data);
         } catch (err) {
             console.error('Error fetching bill data:', err);
-            setError(err.response?.data?.message || err.message || 'Bill not found. Please check the Bill ID.');
+            setError(
+                err.response?.data?.message
+                || err.response?.data?.detail
+                || err.message
+                || 'Bill not found. Please check the Bill ID.'
+            );
         } finally {
             setLoading(false);
         }

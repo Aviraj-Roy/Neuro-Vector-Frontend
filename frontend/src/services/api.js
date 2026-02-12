@@ -5,9 +5,6 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
 
 const apiClient = axios.create({
     baseURL: API_BASE_URL,
-    headers: {
-        'Content-Type': 'application/json',
-    },
 });
 
 // Add request interceptor for logging (optional)
@@ -35,6 +32,99 @@ apiClient.interceptors.response.use(
 );
 
 /**
+ * Extract a bill/upload identifier from various backend response shapes.
+ * @param {Object} data - Raw response payload
+ * @returns {string|undefined}
+ */
+const extractBillId = (data) => {
+    if (!data || typeof data !== 'object') return undefined;
+    return data.billId || data.bill_id || data.upload_id || data.uploadId || data.id;
+};
+
+/**
+ * Normalize upload response so UI can read a stable billId field.
+ * @param {Object} data - Raw response payload
+ * @returns {Object}
+ */
+const normalizeUploadResponse = (data) => {
+    const billId = extractBillId(data);
+    return {
+        ...data,
+        billId,
+    };
+};
+
+/**
+ * Normalize status response across possible backend variants.
+ * @param {Object} data - Raw response payload
+ * @param {string} billId - Requested bill ID
+ * @returns {Object}
+ */
+const normalizeStatusResponse = (data, billId) => {
+    const rawStage = data?.stage || data?.status || data?.verification_status || 'UNKNOWN';
+    const stage = String(rawStage).toUpperCase();
+
+    return {
+        ...data,
+        billId: extractBillId(data) || billId,
+        stage,
+    };
+};
+
+/**
+ * Normalize bill lookup response across possible backend variants.
+ * @param {Object} data - Raw response payload
+ * @param {string} billId - Requested bill ID
+ * @returns {Object}
+ */
+const normalizeBillDataResponse = (data, billId) => {
+    const rawStatus = data?.status || data?.stage || data?.verification_status || 'UNKNOWN';
+    const status = String(rawStatus).toUpperCase();
+
+    return {
+        ...data,
+        billId: extractBillId(data) || billId,
+        status,
+        verification_result: data?.verification_result || data?.verificationResult || data?.result || null,
+    };
+};
+
+/**
+ * Normalize hospitals response across backend variants.
+ * @param {Object|Array} data - Raw response payload
+ * @returns {Array<{id: string, name: string}>}
+ */
+const normalizeHospitalsResponse = (data) => {
+    const rawHospitals = Array.isArray(data)
+        ? data
+        : Array.isArray(data?.hospitals)
+            ? data.hospitals
+            : [];
+
+    return rawHospitals
+        .map((item) => {
+            if (typeof item === 'string') {
+                return {
+                    id: item.toLowerCase().replace(/\s+/g, '_'),
+                    name: item,
+                };
+            }
+
+            if (item && typeof item === 'object') {
+                const name = item.name || item.hospital_name || item.id;
+                if (!name) return null;
+                return {
+                    id: item.id || String(name).toLowerCase().replace(/\s+/g, '_'),
+                    name: String(name),
+                };
+            }
+
+            return null;
+        })
+        .filter(Boolean);
+};
+
+/**
  * Upload a medical bill file
  * @param {File} file - The bill file (PDF/Image)
  * @param {string} hospitalName - Selected hospital name
@@ -43,15 +133,13 @@ apiClient.interceptors.response.use(
 export const uploadBill = async (file, hospitalName) => {
     const formData = new FormData();
     formData.append('file', file);
+    // Current backend expects `hospital_name`. Keep `hospital` for compatibility.
+    formData.append('hospital_name', hospitalName);
     formData.append('hospital', hospitalName);
 
-    const response = await apiClient.post('/upload', formData, {
-        headers: {
-            'Content-Type': 'multipart/form-data',
-        },
-    });
+    const response = await apiClient.post('/upload', formData);
 
-    return response.data;
+    return normalizeUploadResponse(response.data);
 };
 
 /**
@@ -61,7 +149,7 @@ export const uploadBill = async (file, hospitalName) => {
  */
 export const getBillStatus = async (billId) => {
     const response = await apiClient.get(`/status/${billId}`);
-    return response.data;
+    return normalizeStatusResponse(response.data, billId);
 };
 
 /**
@@ -71,7 +159,7 @@ export const getBillStatus = async (billId) => {
  */
 export const getBillData = async (billId) => {
     const response = await apiClient.get(`/bill/${billId}`);
-    return response.data;
+    return normalizeBillDataResponse(response.data, billId);
 };
 
 /**
@@ -80,7 +168,7 @@ export const getBillData = async (billId) => {
  */
 export const getHospitals = async () => {
     const response = await apiClient.get('/tieups');
-    return response.data;
+    return normalizeHospitalsResponse(response.data);
 };
 
 /**
