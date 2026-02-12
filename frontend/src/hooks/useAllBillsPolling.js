@@ -30,16 +30,29 @@ const hasActiveBills = (bills) => {
  */
 export const useAllBillsPolling = () => {
     const [bills, setBills] = useState([]);
-    const [loading, setLoading] = useState(false);
+    const [loading, setLoading] = useState(true); // Start with true for initial load
     const [error, setError] = useState(null);
 
     const intervalRef = useRef(null);
     const isMountedRef = useRef(true);
+    const isFirstLoadRef = useRef(true);
+
+    // Function to stop polling
+    const stopPolling = useCallback(() => {
+        if (intervalRef.current) {
+            clearInterval(intervalRef.current);
+            intervalRef.current = null;
+            console.log('[Bills Polling] Stopped - all bills in terminal state');
+        }
+    }, []);
 
     // Function to fetch all bills
     const fetchBills = useCallback(async () => {
         try {
-            setLoading(true);
+            // Only show loading on first load
+            if (isFirstLoadRef.current) {
+                setLoading(true);
+            }
             setError(null);
 
             const data = await getAllBills();
@@ -47,6 +60,12 @@ export const useAllBillsPolling = () => {
             // Only update state if component is still mounted
             if (isMountedRef.current) {
                 setBills(data);
+
+                // Clear first load flag
+                if (isFirstLoadRef.current) {
+                    isFirstLoadRef.current = false;
+                    setLoading(false);
+                }
 
                 // Stop polling if no active bills
                 if (!hasActiveBills(data)) {
@@ -62,22 +81,15 @@ export const useAllBillsPolling = () => {
                     || err.message
                     || 'Failed to fetch bills'
                 );
-            }
-        } finally {
-            if (isMountedRef.current) {
-                setLoading(false);
-            }
-        }
-    }, []);
 
-    // Function to stop polling
-    const stopPolling = useCallback(() => {
-        if (intervalRef.current) {
-            clearInterval(intervalRef.current);
-            intervalRef.current = null;
-            console.log('[Bills Polling] Stopped - all bills in terminal state');
+                // Clear loading state on error
+                if (isFirstLoadRef.current) {
+                    isFirstLoadRef.current = false;
+                    setLoading(false);
+                }
+            }
         }
-    }, []);
+    }, [stopPolling]);
 
     // Start polling on mount
     useEffect(() => {

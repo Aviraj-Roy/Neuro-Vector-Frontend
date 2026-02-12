@@ -94,6 +94,9 @@ const UploadPage = () => {
             console.log('Upload response:', response);
             const billId = response.billId || response.upload_id || response.uploadId;
 
+            // Clear loading state before navigation
+            setLoading(false);
+
             // Navigate to dashboard after successful upload
             if (billId) {
                 navigate('/dashboard');
@@ -102,14 +105,13 @@ const UploadPage = () => {
             }
         } catch (err) {
             console.error('Upload error:', err);
+            setLoading(false);
             setError(
                 err.response?.data?.message
                 || err.response?.data?.detail
                 || err.message
                 || 'Failed to upload bill. Please try again.'
             );
-        } finally {
-            setLoading(false);
         }
     };
 
