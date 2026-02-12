@@ -71,12 +71,28 @@ const normalizeBillsResponse = (data) => {
     }));
 };
 
-const normalizeBillDataResponse = (data, uploadId) => ({
-    ...data,
-    upload_id: data?.upload_id || uploadId,
-    status: normalizeStatus(data?.status),
-    verification_result: data?.verification_result || data?.verificationResult || data?.result || null,
-});
+const normalizeBillDataResponse = (data, uploadId) => {
+    const rawVerification = data?.verificationResult ?? data?.verification_result ?? data?.result ?? '';
+    const verificationAsText = typeof rawVerification === 'string'
+        ? rawVerification
+        : rawVerification
+            ? JSON.stringify(rawVerification, null, 2)
+            : '';
+
+    return {
+        ...data,
+        bill_id: data?.billId || data?.bill_id || data?.upload_id || uploadId,
+        upload_id: data?.upload_id || data?.billId || uploadId,
+        status: normalizeStatus(data?.status),
+        verification_result: verificationAsText,
+        financial_totals: {
+            total_billed: Number(data?.financial_totals?.total_billed || 0),
+            total_allowed: Number(data?.financial_totals?.total_allowed || 0),
+            total_extra: Number(data?.financial_totals?.total_extra || 0),
+            total_unclassified: Number(data?.financial_totals?.total_unclassified || 0),
+        },
+    };
+};
 
 const normalizeHospitalsResponse = (data) => {
     const rawHospitals = Array.isArray(data)
@@ -140,6 +156,15 @@ export const getBillData = async (uploadId) => {
     return normalizeBillDataResponse(response.data, uploadId);
 };
 
+export const verifyBill = async (uploadId, hospitalName = null) => {
+    const formData = new FormData();
+    if (hospitalName) {
+        formData.append('hospital_name', hospitalName);
+    }
+    const response = await apiClient.post(`/verify/${uploadId}`, formData);
+    return response.data;
+};
+
 export const getHospitals = async () => {
     const response = await apiClient.get('/tieups');
     return normalizeHospitalsResponse(response.data);
@@ -161,6 +186,7 @@ export default {
     getAllBills,
     deleteBill,
     getBillData,
+    verifyBill,
     getHospitals,
     reloadTieups,
     healthCheck,

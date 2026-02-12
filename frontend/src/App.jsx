@@ -4,7 +4,7 @@ import { ThemeProvider, createTheme, CssBaseline } from '@mui/material';
 import Layout from './components/Layout';
 import UploadPage from './pages/UploadPage';
 import DashboardPage from './pages/DashboardPage';
-import BillLookupPage from './pages/BillLookupPage';
+import ResultPage from './pages/ResultPage';
 import StatusPage from './pages/StatusPage';
 
 // Create Material-UI theme
@@ -102,7 +102,7 @@ function App() {
                         <Route path="status/:uploadId" element={<StatusPage />} />
 
                         {/* Bill Details Page - View individual bill results */}
-                        <Route path="bill/:uploadId" element={<BillLookupPage />} />
+                        <Route path="bill/:uploadId" element={<ResultPage />} />
 
                         {/* Redirect root to upload */}
                         <Route index element={<Navigate to="/upload" replace />} />
