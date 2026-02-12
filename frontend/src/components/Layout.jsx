@@ -11,7 +11,7 @@ import {
     useTheme,
     useMediaQuery,
 } from '@mui/material';
-import { CloudUpload, Search, LocalHospital } from '@mui/icons-material';
+import { CloudUpload, Dashboard, LocalHospital } from '@mui/icons-material';
 
 /**
  * Layout Component
@@ -42,7 +42,7 @@ const Layout = () => {
                     <IconButton
                         edge="start"
                         color="inherit"
-                        onClick={() => handleNavigate('/')}
+                        onClick={() => handleNavigate('/upload')}
                         sx={{ mr: 2 }}
                     >
                         <LocalHospital sx={{ fontSize: 32 }} />
@@ -57,7 +57,7 @@ const Layout = () => {
                             cursor: 'pointer',
                             fontSize: isMobile ? '1rem' : '1.25rem',
                         }}
-                        onClick={() => handleNavigate('/')}
+                        onClick={() => handleNavigate('/upload')}
                     >
                         Medical Bill Verification
                     </Typography>
@@ -68,11 +68,11 @@ const Layout = () => {
                             <Button
                                 color="inherit"
                                 startIcon={<CloudUpload />}
-                                onClick={() => handleNavigate('/')}
+                                onClick={() => handleNavigate('/upload')}
                                 sx={{
                                     textTransform: 'none',
-                                    fontWeight: isActive('/') ? 700 : 400,
-                                    borderBottom: isActive('/') ? '2px solid white' : 'none',
+                                    fontWeight: isActive('/upload') ? 700 : 400,
+                                    borderBottom: isActive('/upload') ? '2px solid white' : 'none',
                                     borderRadius: 0,
                                 }}
                             >
@@ -80,16 +80,16 @@ const Layout = () => {
                             </Button>
                             <Button
                                 color="inherit"
-                                startIcon={<Search />}
-                                onClick={() => handleNavigate('/lookup')}
+                                startIcon={<Dashboard />}
+                                onClick={() => handleNavigate('/dashboard')}
                                 sx={{
                                     textTransform: 'none',
-                                    fontWeight: isActive('/lookup') ? 700 : 400,
-                                    borderBottom: isActive('/lookup') ? '2px solid white' : 'none',
+                                    fontWeight: isActive('/dashboard') ? 700 : 400,
+                                    borderBottom: isActive('/dashboard') ? '2px solid white' : 'none',
                                     borderRadius: 0,
                                 }}
                             >
-                                Lookup
+                                Dashboard
                             </Button>
                         </Box>
                     )}
@@ -99,9 +99,9 @@ const Layout = () => {
                         <Box sx={{ display: 'flex', gap: 0.5 }}>
                             <IconButton
                                 color="inherit"
-                                onClick={() => handleNavigate('/')}
+                                onClick={() => handleNavigate('/upload')}
                                 sx={{
-                                    borderBottom: isActive('/') ? '2px solid white' : 'none',
+                                    borderBottom: isActive('/upload') ? '2px solid white' : 'none',
                                     borderRadius: 0,
                                 }}
                             >
@@ -109,13 +109,13 @@ const Layout = () => {
                             </IconButton>
                             <IconButton
                                 color="inherit"
-                                onClick={() => handleNavigate('/lookup')}
+                                onClick={() => handleNavigate('/dashboard')}
                                 sx={{
-                                    borderBottom: isActive('/lookup') ? '2px solid white' : 'none',
+                                    borderBottom: isActive('/dashboard') ? '2px solid white' : 'none',
                                     borderRadius: 0,
                                 }}
                             >
-                                <Search />
+                                <Dashboard />
                             </IconButton>
                         </Box>
                     )}

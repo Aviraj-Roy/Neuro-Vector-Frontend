@@ -94,9 +94,9 @@ const UploadPage = () => {
             console.log('Upload response:', response);
             const billId = response.billId || response.upload_id || response.uploadId;
 
-            // Navigate to status page with billId
+            // Navigate to dashboard after successful upload
             if (billId) {
-                navigate(`/status/${billId}`);
+                navigate('/dashboard');
             } else {
                 setError('Upload succeeded but no bill identifier was returned.');
             }
@@ -241,8 +241,8 @@ const UploadPage = () => {
                 {/* Info Box */}
                 <Box sx={{ mt: 4, p: 2, backgroundColor: 'info.lighter', borderRadius: 2 }}>
                     <Typography variant="body2" color="text.secondary">
-                        <strong>Note:</strong> After uploading, you&apos;ll be redirected to the status page where you can track
-                        the verification progress in real-time.
+                        <strong>Note:</strong> After uploading, you&apos;ll be redirected to the dashboard where you can track
+                        all your bills and their verification progress in real-time.
                     </Typography>
                 </Box>
             </Paper>

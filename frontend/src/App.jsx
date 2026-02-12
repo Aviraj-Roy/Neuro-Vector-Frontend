@@ -3,7 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { ThemeProvider, createTheme, CssBaseline } from '@mui/material';
 import Layout from './components/Layout';
 import UploadPage from './pages/UploadPage';
-import StatusPage from './pages/StatusPage';
+import DashboardPage from './pages/DashboardPage';
 import BillLookupPage from './pages/BillLookupPage';
 
 // Create Material-UI theme
@@ -91,18 +91,20 @@ function App() {
             <BrowserRouter>
                 <Routes>
                     <Route path="/" element={<Layout />}>
-                        {/* Upload Page - Home */}
-                        <Route index element={<UploadPage />} />
+                        {/* Upload Page */}
+                        <Route path="upload" element={<UploadPage />} />
 
-                        {/* Status Page - Shows processing progress */}
-                        <Route path="status/:billId" element={<StatusPage />} />
+                        {/* Dashboard Page - Shows all bills with polling */}
+                        <Route path="dashboard" element={<DashboardPage />} />
 
-                        {/* Bill Lookup Page - Search and view results */}
-                        <Route path="lookup" element={<BillLookupPage />} />
+                        {/* Bill Details Page - View individual bill results */}
                         <Route path="bill/:billId" element={<BillLookupPage />} />
 
-                        {/* Catch-all redirect to home */}
-                        <Route path="*" element={<Navigate to="/" replace />} />
+                        {/* Redirect root to upload */}
+                        <Route index element={<Navigate to="/upload" replace />} />
+
+                        {/* Catch-all redirect to upload */}
+                        <Route path="*" element={<Navigate to="/upload" replace />} />
                     </Route>
                 </Routes>
             </BrowserRouter>

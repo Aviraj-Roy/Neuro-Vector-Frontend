@@ -49,8 +49,12 @@ const extractBillId = (data) => {
 const normalizeUploadResponse = (data) => {
     const billId = extractBillId(data);
     return {
-        ...data,
         billId,
+        fileName: data.fileName || data.file_name || data.filename || 'Unknown',
+        uploadedAt: data.uploadedAt || data.uploaded_at || data.timestamp || new Date().toISOString(),
+        size: data.size || data.file_size || 0,
+        stage: data.stage || data.status || 'UPLOADED',
+        ...data,
     };
 };
 
@@ -125,10 +129,33 @@ const normalizeHospitalsResponse = (data) => {
 };
 
 /**
+ * Normalize bills list response
+ * @param {Object|Array} data - Raw response payload
+ * @returns {Array<Object>}
+ */
+const normalizeBillsResponse = (data) => {
+    const rawBills = Array.isArray(data)
+        ? data
+        : Array.isArray(data?.bills)
+            ? data.bills
+            : [];
+
+    return rawBills.map((bill) => ({
+        billId: extractBillId(bill),
+        fileName: bill.fileName || bill.file_name || bill.filename || 'Unknown',
+        uploadedAt: bill.uploadedAt || bill.uploaded_at || bill.timestamp || new Date().toISOString(),
+        size: bill.size || bill.file_size || 0,
+        stage: String(bill.stage || bill.status || 'UNKNOWN').toUpperCase(),
+        progressPercentage: bill.progressPercentage || bill.progress_percentage || bill.progress || 0,
+        ...bill,
+    }));
+};
+
+/**
  * Upload a medical bill file
  * @param {File} file - The bill file (PDF/Image)
  * @param {string} hospitalName - Selected hospital name
- * @returns {Promise<{billId: string, status: string}>}
+ * @returns {Promise<{billId: string, fileName: string, uploadedAt: string, size: number, stage: string}>}
  */
 export const uploadBill = async (file, hospitalName) => {
     const formData = new FormData();
@@ -150,6 +177,15 @@ export const uploadBill = async (file, hospitalName) => {
 export const getBillStatus = async (billId) => {
     const response = await apiClient.get(`/status/${billId}`);
     return normalizeStatusResponse(response.data, billId);
+};
+
+/**
+ * Get all bills with their current status
+ * @returns {Promise<Array<{billId: string, fileName: string, uploadedAt: string, size: number, stage: string, progressPercentage: number}>>}
+ */
+export const getAllBills = async () => {
+    const response = await apiClient.get('/bills');
+    return normalizeBillsResponse(response.data);
 };
 
 /**
@@ -192,6 +228,7 @@ export const healthCheck = async () => {
 export default {
     uploadBill,
     getBillStatus,
+    getAllBills,
     getBillData,
     getHospitals,
     reloadTieups,
