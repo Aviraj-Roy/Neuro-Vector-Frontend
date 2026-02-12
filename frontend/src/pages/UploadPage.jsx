@@ -123,11 +123,7 @@ const UploadPage = () => {
             const uploadId = response?.upload_id;
 
             if (uploadId) {
-                navigate(`/status/${uploadId}`, {
-                    state: {
-                        initialUploadStatus: response,
-                    },
-                });
+                navigate('/dashboard');
                 return;
             }
 
@@ -137,19 +133,7 @@ const UploadPage = () => {
             const duplicateUploadId = backendData?.upload_id;
 
             if (duplicateUploadId) {
-                navigate(`/status/${duplicateUploadId}`, {
-                    state: {
-                        initialUploadStatus: {
-                            upload_id: duplicateUploadId,
-                            status: String(backendData?.status || 'processing').toUpperCase(),
-                            message: backendData?.message || 'Existing upload detected. Continuing with current upload.',
-                            hospital_name: backendData?.hospital_name || selectedHospital,
-                            page_count: Number(backendData?.page_count || 0),
-                            original_filename: backendData?.original_filename || selectedFile?.name || 'Unknown',
-                            file_size_bytes: Number(backendData?.file_size_bytes || selectedFile?.size || 0),
-                        },
-                    },
-                });
+                navigate('/dashboard');
                 return;
             }
 
