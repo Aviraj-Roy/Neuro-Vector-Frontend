@@ -1,70 +1,42 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
+    Box,
+    Button,
+    CircularProgress,
+    IconButton,
+    Paper,
     Table,
     TableBody,
     TableCell,
     TableContainer,
     TableHead,
     TableRow,
-    Paper,
-    Button,
     Typography,
-    Box,
-    CircularProgress,
 } from '@mui/material';
-import { Visibility } from '@mui/icons-material';
+import { DeleteOutline, Visibility } from '@mui/icons-material';
 import StatusBadge from './StatusBadge';
 import { STAGES } from '../constants/stages';
 import { formatFileSize } from '../utils/helpers';
 
-/**
- * Format timestamp to readable date
- * @param {string} timestamp - ISO timestamp
- * @returns {string} Formatted date
- */
-const formatDate = (timestamp) => {
-    if (!timestamp) return 'N/A';
-
-    try {
-        const date = new Date(timestamp);
-        return date.toLocaleString('en-IN', {
-            day: '2-digit',
-            month: 'short',
-            year: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit',
-            hour12: true,
-        });
-    } catch (error) {
-        return 'Invalid Date';
-    }
+const truncateUploadId = (uploadId) => {
+    if (!uploadId) return 'N/A';
+    if (uploadId.length <= 12) return uploadId;
+    return `${uploadId.substring(0, 8)}...`;
 };
 
-/**
- * Truncate Bill ID for display
- * @param {string} billId - Full bill ID
- * @returns {string} Truncated ID
- */
-const truncateBillId = (billId) => {
-    if (!billId) return 'N/A';
-    if (billId.length <= 10) return billId;
-    return `${billId.substring(0, 7)}...`;
+const formatCurrency = (value) => {
+    if (value === null || value === undefined || value === '') return 'N/A';
+    const numeric = Number(value);
+    if (Number.isNaN(numeric)) return String(value);
+    return `Rs. ${numeric.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
 };
 
-/**
- * Bills Table Component
- * Displays all uploaded bills in a table format
- * 
- * @param {Object} props
- * @param {Array} props.bills - Array of bill objects
- * @param {boolean} props.loading - Loading state
- */
-const BillsTable = ({ bills, loading }) => {
+const BillsTable = ({ bills, loading, onDeleteBill, deletingUploadId = null }) => {
     const navigate = useNavigate();
 
-    const handleViewResult = (billId) => {
-        navigate(`/bill/${billId}`);
+    const handleViewResult = (uploadId) => {
+        navigate(`/bill/${uploadId}`);
     };
 
     if (loading && (!bills || bills.length === 0)) {
@@ -79,10 +51,10 @@ const BillsTable = ({ bills, loading }) => {
         return (
             <Paper elevation={2} sx={{ p: 6, textAlign: 'center' }}>
                 <Typography variant="h6" color="text.secondary" gutterBottom>
-                    No bills uploaded yet
+                    No completed bills available
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                    Upload your first medical bill to get started
+                    Upload a medical bill to start verification.
                 </Typography>
             </Paper>
         );
@@ -90,33 +62,22 @@ const BillsTable = ({ bills, loading }) => {
 
     return (
         <TableContainer component={Paper} elevation={3}>
-            <Table sx={{ minWidth: 650 }}>
+            <Table sx={{ minWidth: 900 }}>
                 <TableHead>
                     <TableRow sx={{ backgroundColor: 'grey.100' }}>
-                        <TableCell sx={{ fontWeight: 700, fontSize: '0.875rem' }}>
-                            Bill ID
-                        </TableCell>
-                        <TableCell sx={{ fontWeight: 700, fontSize: '0.875rem' }}>
-                            File Name
-                        </TableCell>
-                        <TableCell sx={{ fontWeight: 700, fontSize: '0.875rem' }}>
-                            Uploaded At
-                        </TableCell>
-                        <TableCell sx={{ fontWeight: 700, fontSize: '0.875rem' }}>
-                            File Size
-                        </TableCell>
-                        <TableCell sx={{ fontWeight: 700, fontSize: '0.875rem' }}>
-                            Current Stage
-                        </TableCell>
-                        <TableCell align="center" sx={{ fontWeight: 700, fontSize: '0.875rem' }}>
-                            Action
-                        </TableCell>
+                        <TableCell sx={{ fontWeight: 700, fontSize: '0.875rem' }}>Upload ID</TableCell>
+                        <TableCell sx={{ fontWeight: 700, fontSize: '0.875rem' }}>Filename</TableCell>
+                        <TableCell sx={{ fontWeight: 700, fontSize: '0.875rem' }}>Size</TableCell>
+                        <TableCell sx={{ fontWeight: 700, fontSize: '0.875rem' }}>Pages</TableCell>
+                        <TableCell sx={{ fontWeight: 700, fontSize: '0.875rem' }}>Status</TableCell>
+                        <TableCell sx={{ fontWeight: 700, fontSize: '0.875rem' }}>Grand Total</TableCell>
+                        <TableCell align="center" sx={{ fontWeight: 700, fontSize: '0.875rem' }}>Action</TableCell>
                     </TableRow>
                 </TableHead>
                 <TableBody>
                     {bills.map((bill) => (
                         <TableRow
-                            key={bill.billId}
+                            key={bill.upload_id}
                             sx={{
                                 '&:hover': {
                                     backgroundColor: 'grey.50',
@@ -133,48 +94,65 @@ const BillsTable = ({ bills, loading }) => {
                                         color: 'primary.main',
                                         fontWeight: 600,
                                     }}
-                                    title={bill.billId}
+                                    title={bill.upload_id}
                                 >
-                                    {truncateBillId(bill.billId)}
+                                    {truncateUploadId(bill.upload_id)}
                                 </Typography>
                             </TableCell>
                             <TableCell>
                                 <Typography variant="body2" sx={{ fontSize: '0.875rem' }}>
-                                    {bill.fileName || 'Unknown'}
+                                    {bill.original_filename || 'Unknown'}
                                 </Typography>
                             </TableCell>
                             <TableCell>
                                 <Typography variant="body2" sx={{ fontSize: '0.875rem' }}>
-                                    {formatDate(bill.uploadedAt)}
+                                    {formatFileSize(Number(bill.file_size_bytes || 0))}
                                 </Typography>
                             </TableCell>
                             <TableCell>
                                 <Typography variant="body2" sx={{ fontSize: '0.875rem' }}>
-                                    {formatFileSize(bill.size)}
+                                    {bill.page_count ?? 0}
                                 </Typography>
                             </TableCell>
                             <TableCell>
-                                <StatusBadge stage={bill.stage} size="small" />
+                                <StatusBadge stage={bill.status} size="small" />
+                            </TableCell>
+                            <TableCell>
+                                <Typography variant="body2" sx={{ fontSize: '0.875rem' }}>
+                                    {formatCurrency(bill.grand_total)}
+                                </Typography>
                             </TableCell>
                             <TableCell align="center">
-                                {bill.stage === STAGES.COMPLETED ? (
-                                    <Button
-                                        variant="contained"
+                                <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 1 }}>
+                                    {bill.status === STAGES.COMPLETED ? (
+                                        <Button
+                                            variant="contained"
+                                            size="small"
+                                            startIcon={<Visibility />}
+                                            onClick={() => handleViewResult(bill.upload_id)}
+                                            sx={{ textTransform: 'none', fontWeight: 600 }}
+                                        >
+                                            View Result
+                                        </Button>
+                                    ) : (
+                                        <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.875rem' }}>
+                                            -
+                                        </Typography>
+                                    )}
+                                    <IconButton
                                         size="small"
-                                        startIcon={<Visibility />}
-                                        onClick={() => handleViewResult(bill.billId)}
-                                        sx={{
-                                            textTransform: 'none',
-                                            fontWeight: 600,
-                                        }}
+                                        color="error"
+                                        onClick={() => onDeleteBill?.(bill.upload_id)}
+                                        disabled={!onDeleteBill || deletingUploadId === bill.upload_id}
+                                        title="Delete Bill"
                                     >
-                                        View Result
-                                    </Button>
-                                ) : (
-                                    <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.875rem' }}>
-                                        —
-                                    </Typography>
-                                )}
+                                        {deletingUploadId === bill.upload_id ? (
+                                            <CircularProgress size={18} color="error" />
+                                        ) : (
+                                            <DeleteOutline fontSize="small" />
+                                        )}
+                                    </IconButton>
+                                </Box>
                             </TableCell>
                         </TableRow>
                     ))}

@@ -5,6 +5,7 @@ import Layout from './components/Layout';
 import UploadPage from './pages/UploadPage';
 import DashboardPage from './pages/DashboardPage';
 import BillLookupPage from './pages/BillLookupPage';
+import StatusPage from './pages/StatusPage';
 
 // Create Material-UI theme
 const theme = createTheme({
@@ -97,8 +98,11 @@ function App() {
                         {/* Dashboard Page - Shows all bills with polling */}
                         <Route path="dashboard" element={<DashboardPage />} />
 
+                        {/* Upload status page */}
+                        <Route path="status/:uploadId" element={<StatusPage />} />
+
                         {/* Bill Details Page - View individual bill results */}
-                        <Route path="bill/:billId" element={<BillLookupPage />} />
+                        <Route path="bill/:uploadId" element={<BillLookupPage />} />
 
                         {/* Redirect root to upload */}
                         <Route index element={<Navigate to="/upload" replace />} />

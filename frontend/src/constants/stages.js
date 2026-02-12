@@ -1,10 +1,7 @@
-// Processing stages in order
+// Backend lifecycle statuses
 export const STAGES = {
     UPLOADED: 'UPLOADED',
-    EXTRACTING: 'EXTRACTING',
-    EXTRACTED: 'EXTRACTED',
-    STORED: 'STORED',
-    VERIFYING: 'VERIFYING',
+    PROCESSING: 'PROCESSING',
     COMPLETED: 'COMPLETED',
     FAILED: 'FAILED',
 };
@@ -17,29 +14,11 @@ export const STAGE_CONFIG = {
         color: 'primary',
         icon: 'CloudUpload',
     },
-    [STAGES.EXTRACTING]: {
-        label: 'Extracting',
-        description: 'Extracting text from document',
+    [STAGES.PROCESSING]: {
+        label: 'Processing',
+        description: 'Bill is being processed',
         color: 'info',
         icon: 'FindInPage',
-    },
-    [STAGES.EXTRACTED]: {
-        label: 'Extracted',
-        description: 'Text extraction completed',
-        color: 'info',
-        icon: 'Description',
-    },
-    [STAGES.STORED]: {
-        label: 'Stored',
-        description: 'Data stored in database',
-        color: 'info',
-        icon: 'Storage',
-    },
-    [STAGES.VERIFYING]: {
-        label: 'Verifying',
-        description: 'Verifying against hospital rates',
-        color: 'warning',
-        icon: 'FactCheck',
     },
     [STAGES.COMPLETED]: {
         label: 'Completed',
@@ -58,10 +37,7 @@ export const STAGE_CONFIG = {
 // Ordered list of stages for progress tracking
 export const STAGE_ORDER = [
     STAGES.UPLOADED,
-    STAGES.EXTRACTING,
-    STAGES.EXTRACTED,
-    STAGES.STORED,
-    STAGES.VERIFYING,
+    STAGES.PROCESSING,
     STAGES.COMPLETED,
 ];
 
@@ -75,9 +51,6 @@ export const MAX_POLLING_ATTEMPTS = 200; // 10 minutes max (200 * 3s)
 // File upload configuration
 export const ACCEPTED_FILE_TYPES = {
     'application/pdf': ['.pdf'],
-    'image/jpeg': ['.jpg', '.jpeg'],
-    'image/png': ['.png'],
-    'image/webp': ['.webp'],
 };
 
 export const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB

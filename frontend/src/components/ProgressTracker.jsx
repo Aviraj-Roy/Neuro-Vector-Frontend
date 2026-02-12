@@ -13,9 +13,6 @@ import {
 import {
     CloudUpload,
     FindInPage,
-    Description,
-    Storage,
-    FactCheck,
     CheckCircle,
     Error,
 } from '@mui/icons-material';
@@ -26,9 +23,6 @@ import { calculateProgress, getStageIndex } from '../utils/helpers';
 const ICON_MAP = {
     CloudUpload,
     FindInPage,
-    Description,
-    Storage,
-    FactCheck,
     CheckCircle,
     Error,
 };

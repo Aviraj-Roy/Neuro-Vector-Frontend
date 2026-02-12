@@ -1,55 +1,49 @@
 import React, { useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
+    Alert,
+    Box,
+    Button,
+    Chip,
+    CircularProgress,
     Container,
     Paper,
     Typography,
-    Button,
-    Box,
-    Alert,
-    CircularProgress,
-    Chip,
 } from '@mui/material';
 import { ArrowBack, Visibility } from '@mui/icons-material';
 import ProgressTracker from '../components/ProgressTracker';
 import { useBillPolling } from '../hooks/useBillPolling';
 import { STAGES } from '../constants/stages';
+import { formatFileSize } from '../utils/helpers';
 
-/**
- * Status Page Component
- * Displays real-time bill processing status with polling
- */
 const StatusPage = () => {
-    const { billId } = useParams();
+    const { uploadId } = useParams();
+    const location = useLocation();
     const navigate = useNavigate();
 
-    // Use custom polling hook
-    const { status, loading, error, attempts } = useBillPolling(billId, true);
+    const initialUploadStatus = location.state?.initialUploadStatus || null;
+    const { status, loading, error, attempts } = useBillPolling(uploadId, true, initialUploadStatus);
 
-    // Redirect validation
     useEffect(() => {
-        if (!billId) {
-            navigate('/');
+        if (!uploadId) {
+            navigate('/upload');
         }
-    }, [billId, navigate]);
+    }, [uploadId, navigate]);
 
-    // Handle view results
     const handleViewResults = () => {
-        navigate(`/bill/${billId}`);
+        navigate(`/bill/${uploadId}`);
     };
 
-    // Handle back to upload
     const handleBackToUpload = () => {
-        navigate('/');
+        navigate('/upload');
     };
 
     return (
         <Container maxWidth="md" sx={{ py: 4 }}>
-            {/* Header */}
             <Paper elevation={3} sx={{ p: 3, mb: 3 }}>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
                     <Typography variant="h4" sx={{ fontWeight: 700, color: 'primary.main' }}>
-                        Bill Status
+                        Upload Status
                     </Typography>
                     <Button
                         variant="outlined"
@@ -61,80 +55,85 @@ const StatusPage = () => {
                     </Button>
                 </Box>
 
-                {/* Bill ID Display */}
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
                     <Typography variant="body1" color="text.secondary">
-                        Bill ID:
+                        Upload ID:
                     </Typography>
                     <Chip
-                        label={billId}
+                        label={uploadId}
                         color="primary"
                         variant="outlined"
                         sx={{ fontFamily: 'monospace', fontSize: '0.9rem' }}
                     />
                 </Box>
 
-                {/* Polling Info */}
                 {status && (
-                    <Box sx={{ mt: 2, display: 'flex', alignItems: 'center', gap: 2 }}>
-                        <Typography variant="body2" color="text.secondary">
-                            Status:
-                        </Typography>
-                        <Chip
-                            label={status.stage}
-                            color={
-                                status.stage === STAGES.COMPLETED
-                                    ? 'success'
-                                    : status.stage === STAGES.FAILED
-                                        ? 'error'
-                                        : 'primary'
-                            }
-                            size="small"
-                        />
-                        {status.stage !== STAGES.COMPLETED && status.stage !== STAGES.FAILED && (
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                <CircularProgress size={16} />
-                                <Typography variant="body2" color="text.secondary">
-                                    Polling... (attempt {attempts})
-                                </Typography>
-                            </Box>
-                        )}
-                    </Box>
+                    <>
+                        <Box sx={{ mt: 2, display: 'flex', alignItems: 'center', gap: 2 }}>
+                            <Typography variant="body2" color="text.secondary">
+                                Status:
+                            </Typography>
+                            <Chip
+                                label={status.status}
+                                color={
+                                    status.status === STAGES.COMPLETED
+                                        ? 'success'
+                                        : status.status === STAGES.FAILED
+                                            ? 'error'
+                                            : 'primary'
+                                }
+                                size="small"
+                            />
+                            {status.status !== STAGES.COMPLETED && status.status !== STAGES.FAILED && (
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                    <CircularProgress size={16} />
+                                    <Typography variant="body2" color="text.secondary">
+                                        Polling... (attempt {attempts})
+                                    </Typography>
+                                </Box>
+                            )}
+                        </Box>
+
+                        <Box sx={{ mt: 2, display: 'grid', gridTemplateColumns: '1fr', gap: 0.75 }}>
+                            <Typography variant="body2" color="text.secondary">
+                                File: <strong>{status.original_filename || 'Unknown'}</strong>
+                            </Typography>
+                            <Typography variant="body2" color="text.secondary">
+                                Size: <strong>{formatFileSize(Number(status.file_size_bytes || 0))}</strong>
+                            </Typography>
+                            <Typography variant="body2" color="text.secondary">
+                                Pages: <strong>{status.page_count ?? 0}</strong>
+                            </Typography>
+                        </Box>
+                    </>
                 )}
             </Paper>
 
-            {/* Error Alert */}
             {error && (
                 <Alert severity="error" sx={{ mb: 3 }}>
                     {error}
                 </Alert>
             )}
 
-            {/* Loading State */}
             {!status && loading && (
                 <Paper elevation={3} sx={{ p: 4, textAlign: 'center' }}>
                     <CircularProgress size={60} sx={{ mb: 2 }} />
-                    <Typography variant="h6">Loading bill status...</Typography>
+                    <Typography variant="h6">Loading upload status...</Typography>
                 </Paper>
             )}
 
-            {/* Progress Tracker */}
             {status && (
                 <>
                     <ProgressTracker
-                        currentStage={status.stage}
-                        statusData={status}
-                        error={status.stage === STAGES.FAILED ? status.message : null}
+                        currentStage={status.status}
+                        statusData={{ message: status.message }}
+                        error={status.status === STAGES.FAILED ? status.message : null}
                     />
 
-                    {/* Action Buttons */}
-                    {status.stage === STAGES.COMPLETED && (
+                    {status.status === STAGES.COMPLETED && (
                         <Paper elevation={3} sx={{ p: 3, mt: 3, textAlign: 'center' }}>
                             <Typography variant="h6" gutterBottom sx={{ fontWeight: 600 }}>
-                                Verification Complete!
-                            </Typography>
-                            <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
-                                Your medical bill has been successfully verified. View the detailed results below.
+                                Verification Complete
                             </Typography>
                             <Button
                                 variant="contained"
@@ -154,7 +153,7 @@ const StatusPage = () => {
                         </Paper>
                     )}
 
-                    {status.stage === STAGES.FAILED && (
+                    {status.status === STAGES.FAILED && (
                         <Paper elevation={3} sx={{ p: 3, mt: 3, textAlign: 'center' }}>
                             <Typography variant="h6" gutterBottom sx={{ fontWeight: 600, color: 'error.main' }}>
                                 Processing Failed
@@ -180,14 +179,6 @@ const StatusPage = () => {
                     )}
                 </>
             )}
-
-            {/* Info Box */}
-            <Box sx={{ mt: 4, p: 2, backgroundColor: 'info.lighter', borderRadius: 2 }}>
-                <Typography variant="body2" color="text.secondary">
-                    <strong>Note:</strong> This page automatically updates every 3 seconds. The verification process
-                    typically takes 30-60 seconds depending on the bill complexity.
-                </Typography>
-            </Box>
         </Container>
     );
 };

@@ -1,16 +1,17 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { getBillStatus } from '../services/api';
+import { getUploadStatus } from '../services/api';
 import { isTerminalStage } from '../utils/helpers';
 import { POLLING_INTERVAL, MAX_POLLING_ATTEMPTS } from '../constants/stages';
 
 /**
  * Custom hook for polling bill status
- * @param {string} billId - Bill ID to poll
+ * @param {string} uploadId - Upload ID to poll
  * @param {boolean} enabled - Whether polling is enabled
+ * @param {Object|null} initialStatus - Initial status from /upload response
  * @returns {Object} { status, loading, error, stopPolling }
  */
-export const useBillPolling = (billId, enabled = true) => {
-    const [status, setStatus] = useState(null);
+export const useBillPolling = (uploadId, enabled = true, initialStatus = null) => {
+    const [status, setStatus] = useState(initialStatus);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
     const [attempts, setAttempts] = useState(0);
@@ -18,15 +19,20 @@ export const useBillPolling = (billId, enabled = true) => {
     const intervalRef = useRef(null);
     const isMountedRef = useRef(true);
 
+    useEffect(() => {
+        setStatus(initialStatus);
+        setAttempts(0);
+    }, [uploadId, initialStatus]);
+
     // Function to fetch status
     const fetchStatus = useCallback(async () => {
-        if (!billId || !enabled) return;
+        if (!uploadId || !enabled) return;
 
         try {
             setLoading(true);
             setError(null);
 
-            const data = await getBillStatus(billId);
+            const data = await getUploadStatus(uploadId);
 
             // Only update state if component is still mounted
             if (isMountedRef.current) {
@@ -34,7 +40,7 @@ export const useBillPolling = (billId, enabled = true) => {
                 setAttempts((prev) => prev + 1);
 
                 // Stop polling if terminal stage reached
-                if (isTerminalStage(data.stage)) {
+                if (isTerminalStage(data.status)) {
                     stopPolling();
                 }
             }
@@ -53,7 +59,7 @@ export const useBillPolling = (billId, enabled = true) => {
                 setLoading(false);
             }
         }
-    }, [billId, enabled]);
+    }, [uploadId, enabled]);
 
     // Function to stop polling
     const stopPolling = useCallback(() => {
@@ -64,9 +70,9 @@ export const useBillPolling = (billId, enabled = true) => {
         }
     }, []);
 
-    // Start polling when enabled and billId is available
+    // Start polling when enabled and uploadId is available
     useEffect(() => {
-        if (!billId || !enabled) {
+        if (!uploadId || !enabled) {
             stopPolling();
             return;
         }
@@ -75,7 +81,7 @@ export const useBillPolling = (billId, enabled = true) => {
         fetchStatus();
 
         // Set up polling interval
-        console.log(`[Polling] Started for billId: ${billId}`);
+        console.log(`[Polling] Started for upload_id: ${uploadId}`);
         intervalRef.current = setInterval(() => {
             fetchStatus();
         }, POLLING_INTERVAL);
@@ -84,7 +90,7 @@ export const useBillPolling = (billId, enabled = true) => {
         return () => {
             stopPolling();
         };
-    }, [billId, enabled, fetchStatus, stopPolling]);
+    }, [uploadId, enabled, fetchStatus, stopPolling]);
 
     // Stop polling after max attempts
     useEffect(() => {

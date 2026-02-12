@@ -5,9 +5,6 @@ import {
     Error,
     CloudUpload,
     FindInPage,
-    Description,
-    Storage,
-    FactCheck,
     HourglassEmpty,
 } from '@mui/icons-material';
 import { STAGES } from '../constants/stages';
@@ -43,29 +40,11 @@ const StatusBadge = ({ stage, size = 'small' }) => {
                     color: 'info',
                     icon: <CloudUpload sx={{ fontSize: 16 }} />,
                 };
-            case STAGES.EXTRACTING:
+            case STAGES.PROCESSING:
                 return {
-                    label: 'Extracting',
+                    label: 'Processing',
                     color: 'info',
                     icon: <FindInPage sx={{ fontSize: 16 }} />,
-                };
-            case STAGES.EXTRACTED:
-                return {
-                    label: 'Extracted',
-                    color: 'info',
-                    icon: <Description sx={{ fontSize: 16 }} />,
-                };
-            case STAGES.STORED:
-                return {
-                    label: 'Stored',
-                    color: 'info',
-                    icon: <Storage sx={{ fontSize: 16 }} />,
-                };
-            case STAGES.VERIFYING:
-                return {
-                    label: 'Verifying',
-                    color: 'warning',
-                    icon: <FactCheck sx={{ fontSize: 16 }} />,
                 };
             default:
                 return {

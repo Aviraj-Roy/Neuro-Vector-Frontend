@@ -25,26 +25,26 @@ import { formatTimestamp } from '../utils/helpers';
  * Allows users to search for and view bill verification results
  */
 const BillLookupPage = () => {
-    const { billId: urlBillId } = useParams();
+    const { uploadId: urlUploadId } = useParams();
     const navigate = useNavigate();
 
     // State management
-    const [billId, setBillId] = useState(urlBillId || '');
+    const [uploadId, setUploadId] = useState(urlUploadId || '');
     const [billData, setBillData] = useState(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
 
-    // Fetch bill data on component mount if billId in URL
+    // Fetch bill data on component mount if uploadId in URL
     React.useEffect(() => {
-        if (urlBillId) {
-            handleSearch(urlBillId);
+        if (urlUploadId) {
+            handleSearch(urlUploadId);
         }
-    }, [urlBillId]);
+    }, [urlUploadId]);
 
     // Handle search
-    const handleSearch = async (searchBillId = billId) => {
-        if (!searchBillId.trim()) {
-            setError('Please enter a Bill ID');
+    const handleSearch = async (searchUploadId = uploadId) => {
+        if (!searchUploadId.trim()) {
+            setError('Please enter an Upload ID');
             return;
         }
 
@@ -53,7 +53,7 @@ const BillLookupPage = () => {
             setError(null);
             setBillData(null);
 
-            const data = await getBillData(searchBillId);
+            const data = await getBillData(searchUploadId);
             setBillData(data);
         } catch (err) {
             console.error('Error fetching bill data:', err);
@@ -61,7 +61,7 @@ const BillLookupPage = () => {
                 err.response?.data?.message
                 || err.response?.data?.detail
                 || err.message
-                || 'Bill not found. Please check the Bill ID.'
+                || 'Bill not found. Please check the Upload ID.'
             );
         } finally {
             setLoading(false);
@@ -93,10 +93,10 @@ const BillLookupPage = () => {
                         <Grid container spacing={2}>
                             <Grid item xs={12} sm={6}>
                                 <Typography variant="body2" color="text.secondary">
-                                    Bill ID
+                                    Upload ID
                                 </Typography>
                                 <Typography variant="body1" fontWeight={600} sx={{ fontFamily: 'monospace' }}>
-                                    {billData.billId || billId}
+                                    {billData.upload_id || uploadId}
                                 </Typography>
                             </Grid>
 
@@ -219,7 +219,7 @@ const BillLookupPage = () => {
                 </Box>
 
                 <Typography variant="body1" color="text.secondary">
-                    Enter a Bill ID to view verification status and results
+                    Enter an Upload ID to view verification status and results
                 </Typography>
             </Paper>
 
@@ -229,10 +229,10 @@ const BillLookupPage = () => {
                     <Box sx={{ display: 'flex', gap: 2 }}>
                         <TextField
                             fullWidth
-                            label="Bill ID"
-                            placeholder="Enter Bill ID"
-                            value={billId}
-                            onChange={(e) => setBillId(e.target.value)}
+                            label="Upload ID"
+                            placeholder="Enter Upload ID"
+                            value={uploadId}
+                            onChange={(e) => setUploadId(e.target.value)}
                             disabled={loading}
                             variant="outlined"
                             sx={{ fontFamily: 'monospace' }}
@@ -242,7 +242,7 @@ const BillLookupPage = () => {
                             variant="contained"
                             size="large"
                             startIcon={loading ? <CircularProgress size={20} /> : <Search />}
-                            disabled={loading || !billId.trim()}
+                            disabled={loading || !uploadId.trim()}
                             sx={{
                                 px: 4,
                                 textTransform: 'none',
@@ -269,7 +269,7 @@ const BillLookupPage = () => {
             {/* Info Box */}
             <Box sx={{ mt: 4, p: 2, backgroundColor: 'info.lighter', borderRadius: 2 }}>
                 <Typography variant="body2" color="text.secondary">
-                    <strong>Tip:</strong> You can bookmark the URL with a Bill ID to quickly access verification results
+                    <strong>Tip:</strong> You can bookmark the URL with an Upload ID to quickly access verification results
                     later.
                 </Typography>
             </Box>

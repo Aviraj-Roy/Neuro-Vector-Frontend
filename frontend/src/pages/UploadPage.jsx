@@ -1,25 +1,24 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-    Container,
-    Paper,
-    Typography,
+    Alert,
+    Box,
     Button,
+    Chip,
+    CircularProgress,
+    Container,
     FormControl,
     InputLabel,
-    Select,
     MenuItem,
-    Box,
-    Alert,
-    CircularProgress,
-    Chip,
+    Paper,
+    Select,
+    Typography,
 } from '@mui/material';
 import { CloudUpload, Description } from '@mui/icons-material';
 import { uploadBill } from '../services/api';
 import { ACCEPTED_FILE_TYPES, MAX_FILE_SIZE } from '../constants/stages';
 import { formatFileSize, isValidFileType } from '../utils/helpers';
 
-// Predefined list of hospitals
 const HOSPITALS = [
     { id: 'apollo', name: 'Apollo Hospital' },
     { id: 'fortis', name: 'Fortis Hospital' },
@@ -29,55 +28,72 @@ const HOSPITALS = [
     { id: 'narayana', name: 'Narayana Hospital' },
 ];
 
-/**
- * Upload Page Component
- * Handles file upload and hospital selection
- */
+const generateClientRequestId = () => {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+        return crypto.randomUUID();
+    }
+
+    return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+};
+
 const UploadPage = () => {
     const navigate = useNavigate();
+    const uploadInFlightRef = useRef(false);
+    const uploadSessionRef = useRef(null);
 
-    // State management
     const [selectedFile, setSelectedFile] = useState(null);
     const [selectedHospital, setSelectedHospital] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
     const [fileError, setFileError] = useState(null);
 
-    // Handle file selection
+    const resetUploadSession = () => {
+        uploadSessionRef.current = null;
+    };
+
+    const handleHospitalChange = (event) => {
+        setSelectedHospital(event.target.value);
+        resetUploadSession();
+    };
+
     const handleFileChange = (event) => {
         const file = event.target.files[0];
         setFileError(null);
 
         if (!file) {
             setSelectedFile(null);
+            resetUploadSession();
             return;
         }
 
-        // Validate file type
         if (!isValidFileType(file, ACCEPTED_FILE_TYPES)) {
-            setFileError('Invalid file type. Please upload a PDF or image file (JPG, PNG, WEBP).');
+            setFileError('Invalid file type. Please upload a PDF file.');
             setSelectedFile(null);
+            resetUploadSession();
             return;
         }
 
-        // Validate file size
         if (file.size > MAX_FILE_SIZE) {
             setFileError(`File size exceeds ${formatFileSize(MAX_FILE_SIZE)}. Please upload a smaller file.`);
             setSelectedFile(null);
+            resetUploadSession();
             return;
         }
 
         setSelectedFile(file);
+        resetUploadSession();
     };
 
-    // Handle form submission
     const handleSubmit = async (event) => {
         event.preventDefault();
         setError(null);
 
-        // Validation
+        if (uploadInFlightRef.current) {
+            return;
+        }
+
         if (!selectedFile) {
-            setError('Please select a file to upload.');
+            setError('Please select a PDF file to upload.');
             return;
         }
 
@@ -86,58 +102,88 @@ const UploadPage = () => {
             return;
         }
 
+        const uploadFingerprint = `${selectedFile.name}:${selectedFile.size}:${selectedFile.lastModified}:${selectedHospital}`;
+        const currentSession = uploadSessionRef.current;
+        const clientRequestId = currentSession?.fingerprint === uploadFingerprint
+            ? currentSession.clientRequestId
+            : generateClientRequestId();
+
+        if (!currentSession || currentSession.fingerprint !== uploadFingerprint) {
+            uploadSessionRef.current = {
+                fingerprint: uploadFingerprint,
+                clientRequestId,
+            };
+        }
+
         try {
+            uploadInFlightRef.current = true;
             setLoading(true);
 
-            // Upload bill
-            const response = await uploadBill(selectedFile, selectedHospital);
-            console.log('Upload response:', response);
-            const billId = response.billId || response.upload_id || response.uploadId;
+            const response = await uploadBill(selectedFile, selectedHospital, clientRequestId);
+            const uploadId = response?.upload_id;
 
-            // Clear loading state before navigation
-            setLoading(false);
-
-            // Navigate to dashboard after successful upload
-            if (billId) {
-                navigate('/dashboard');
-            } else {
-                setError('Upload succeeded but no bill identifier was returned.');
+            if (uploadId) {
+                navigate(`/status/${uploadId}`, {
+                    state: {
+                        initialUploadStatus: response,
+                    },
+                });
+                return;
             }
+
+            setError('Upload succeeded but no upload_id was returned.');
         } catch (err) {
-            console.error('Upload error:', err);
-            setLoading(false);
+            const backendData = err.response?.data;
+            const duplicateUploadId = backendData?.upload_id;
+
+            if (duplicateUploadId) {
+                navigate(`/status/${duplicateUploadId}`, {
+                    state: {
+                        initialUploadStatus: {
+                            upload_id: duplicateUploadId,
+                            status: String(backendData?.status || 'processing').toUpperCase(),
+                            message: backendData?.message || 'Existing upload detected. Continuing with current upload.',
+                            hospital_name: backendData?.hospital_name || selectedHospital,
+                            page_count: Number(backendData?.page_count || 0),
+                            original_filename: backendData?.original_filename || selectedFile?.name || 'Unknown',
+                            file_size_bytes: Number(backendData?.file_size_bytes || selectedFile?.size || 0),
+                        },
+                    },
+                });
+                return;
+            }
+
             setError(
-                err.response?.data?.message
-                || err.response?.data?.detail
+                backendData?.message
+                || backendData?.detail
                 || err.message
                 || 'Failed to upload bill. Please try again.'
             );
+        } finally {
+            uploadInFlightRef.current = false;
+            setLoading(false);
         }
     };
 
     return (
         <Container maxWidth="md" sx={{ py: 4 }}>
             <Paper elevation={3} sx={{ p: 4 }}>
-                {/* Header */}
                 <Box sx={{ textAlign: 'center', mb: 4 }}>
                     <Typography variant="h4" gutterBottom sx={{ fontWeight: 700, color: 'primary.main' }}>
                         Upload Medical Bill
                     </Typography>
                     <Typography variant="body1" color="text.secondary">
-                        Upload your medical bill for AI-powered verification
+                        Upload your medical bill PDF for AI-powered verification
                     </Typography>
                 </Box>
 
-                {/* Error Alert */}
                 {error && (
                     <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError(null)}>
                         {error}
                     </Alert>
                 )}
 
-                {/* Form */}
                 <form onSubmit={handleSubmit}>
-                    {/* Hospital Selection */}
                     <FormControl fullWidth sx={{ mb: 3 }}>
                         <InputLabel id="hospital-select-label">Select Hospital</InputLabel>
                         <Select
@@ -145,7 +191,7 @@ const UploadPage = () => {
                             id="hospital-select"
                             value={selectedHospital}
                             label="Select Hospital"
-                            onChange={(e) => setSelectedHospital(e.target.value)}
+                            onChange={handleHospitalChange}
                             disabled={loading}
                         >
                             {HOSPITALS.map((hospital) => (
@@ -156,7 +202,6 @@ const UploadPage = () => {
                         </Select>
                     </FormControl>
 
-                    {/* File Upload */}
                     <Box
                         sx={{
                             border: '2px dashed',
@@ -198,23 +243,21 @@ const UploadPage = () => {
                             <Box>
                                 <CloudUpload sx={{ fontSize: 60, color: 'primary.main', mb: 2 }} />
                                 <Typography variant="h6" gutterBottom>
-                                    Click to upload or drag and drop
+                                    Click to upload
                                 </Typography>
                                 <Typography variant="body2" color="text.secondary">
-                                    PDF, JPG, PNG, or WEBP (max {formatFileSize(MAX_FILE_SIZE)})
+                                    PDF only (max {formatFileSize(MAX_FILE_SIZE)})
                                 </Typography>
                             </Box>
                         )}
                     </Box>
 
-                    {/* File Error */}
                     {fileError && (
                         <Alert severity="error" sx={{ mt: 2 }}>
                             {fileError}
                         </Alert>
                     )}
 
-                    {/* Submit Button */}
                     <Button
                         type="submit"
                         variant="contained"
@@ -239,14 +282,6 @@ const UploadPage = () => {
                         )}
                     </Button>
                 </form>
-
-                {/* Info Box */}
-                <Box sx={{ mt: 4, p: 2, backgroundColor: 'info.lighter', borderRadius: 2 }}>
-                    <Typography variant="body2" color="text.secondary">
-                        <strong>Note:</strong> After uploading, you&apos;ll be redirected to the dashboard where you can track
-                        all your bills and their verification progress in real-time.
-                    </Typography>
-                </Box>
             </Paper>
         </Container>
     );

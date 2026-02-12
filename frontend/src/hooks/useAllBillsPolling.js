@@ -1,25 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { getAllBills } from '../services/api';
-import { TERMINAL_STAGES, POLLING_INTERVAL } from '../constants/stages';
-
-/**
- * Check if a stage is terminal (no more processing)
- * @param {string} stage - Stage to check
- * @returns {boolean}
- */
-const isTerminalStage = (stage) => {
-    return TERMINAL_STAGES.includes(String(stage).toUpperCase());
-};
-
-/**
- * Check if any bill in the list is in an active (non-terminal) state
- * @param {Array} bills - Array of bill objects
- * @returns {boolean}
- */
-const hasActiveBills = (bills) => {
-    if (!Array.isArray(bills) || bills.length === 0) return false;
-    return bills.some(bill => !isTerminalStage(bill.stage));
-};
+import { POLLING_INTERVAL } from '../constants/stages';
 
 /**
  * Custom hook for polling all bills
@@ -67,10 +48,6 @@ export const useAllBillsPolling = () => {
                     setLoading(false);
                 }
 
-                // Stop polling if no active bills
-                if (!hasActiveBills(data)) {
-                    stopPolling();
-                }
             }
         } catch (err) {
             if (isMountedRef.current) {

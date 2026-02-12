@@ -12,18 +12,44 @@ import {
 import { Add, Refresh } from '@mui/icons-material';
 import BillsTable from '../components/BillsTable';
 import { useAllBillsPolling } from '../hooks/useAllBillsPolling';
+import { deleteBill } from '../services/api';
 
 /**
  * Dashboard Page Component
- * Displays all uploaded bills with real-time status updates
+ * Displays backend bill records from /bills
  * Polls /bills endpoint every 3 seconds
  */
 const DashboardPage = () => {
     const navigate = useNavigate();
     const { bills, loading, error, refetch } = useAllBillsPolling();
+    const [deleteError, setDeleteError] = React.useState(null);
+    const [deletingUploadId, setDeletingUploadId] = React.useState(null);
 
     const handleUploadNew = () => {
         navigate('/upload');
+    };
+
+    const handleDeleteBill = async (uploadId) => {
+        if (!uploadId) return;
+
+        const confirmed = window.confirm(`Delete bill ${uploadId}? This action cannot be undone.`);
+        if (!confirmed) return;
+
+        try {
+            setDeleteError(null);
+            setDeletingUploadId(uploadId);
+            await deleteBill(uploadId);
+            await refetch();
+        } catch (err) {
+            setDeleteError(
+                err.response?.data?.message
+                || err.response?.data?.detail
+                || err.message
+                || 'Failed to delete bill.'
+            );
+        } finally {
+            setDeletingUploadId(null);
+        }
     };
 
     return (
@@ -35,7 +61,7 @@ const DashboardPage = () => {
                         Bill Verification Dashboard
                     </Typography>
                     <Typography variant="body1" color="text.secondary">
-                        Track all your uploaded medical bills in real-time
+                        Completed bill records from backend
                     </Typography>
                 </Box>
                 <Box sx={{ display: 'flex', gap: 2 }}>
@@ -72,9 +98,19 @@ const DashboardPage = () => {
                     {error}
                 </Alert>
             )}
+            {deleteError && (
+                <Alert severity="error" sx={{ mb: 3 }} onClose={() => setDeleteError(null)}>
+                    {deleteError}
+                </Alert>
+            )}
 
             {/* Bills Table */}
-            <BillsTable bills={bills} loading={loading} />
+            <BillsTable
+                bills={bills}
+                loading={loading}
+                onDeleteBill={handleDeleteBill}
+                deletingUploadId={deletingUploadId}
+            />
 
             {/* Polling Indicator */}
             {bills && bills.length > 0 && (
@@ -89,9 +125,8 @@ const DashboardPage = () => {
             {/* Info Box */}
             <Paper elevation={1} sx={{ mt: 4, p: 3, backgroundColor: 'info.lighter' }}>
                 <Typography variant="body2" color="text.secondary">
-                    <strong>Note:</strong> The dashboard automatically updates every 3 seconds to show the latest
-                    status of your bills. Once a bill is marked as <strong>Completed</strong>, you can click the{' '}
-                    <strong>View Result</strong> button to see the detailed verification report.
+                    <strong>Note:</strong> The dashboard reads directly from <strong>/bills</strong> and refreshes every
+                    3 seconds.
                 </Typography>
             </Paper>
         </Container>
