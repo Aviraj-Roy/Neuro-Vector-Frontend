@@ -14,25 +14,55 @@ import {
     TableRow,
     Typography,
 } from '@mui/material';
-import { DeleteOutline, Visibility } from '@mui/icons-material';
+import { DeleteOutline, RestoreFromTrash, Visibility } from '@mui/icons-material';
 import StatusBadge from './StatusBadge';
 import { STAGES } from '../constants/stages';
-import { formatFileSize } from '../utils/helpers';
+import { formatInvoiceDate, formatUploadDateTime } from '../utils/billDateDisplay';
 
-const truncateUploadId = (uploadId) => {
-    if (!uploadId) return 'N/A';
-    if (uploadId.length <= 12) return uploadId;
-    return `${uploadId.substring(0, 8)}...`;
+const formatDuration = (seconds) => {
+    const totalSeconds = Number(seconds);
+    if (!Number.isFinite(totalSeconds) || totalSeconds < 0) return '-';
+
+    const hrs = Math.floor(totalSeconds / 3600);
+    const mins = Math.floor((totalSeconds % 3600) / 60);
+    const secs = Math.floor(totalSeconds % 60);
+
+    if (hrs > 0) return `${hrs}h ${mins}m ${secs}s`;
+    if (mins > 0) return `${mins}m ${secs}s`;
+    return `${secs}s`;
 };
 
-const formatCurrency = (value) => {
-    if (value === null || value === undefined || value === '') return 'N/A';
-    const numeric = Number(value);
-    if (Number.isNaN(numeric)) return String(value);
-    return `Rs. ${numeric.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
+const getProcessingTimeText = (bill) => {
+    if (!bill || typeof bill !== 'object') return '-';
+
+    const directValue = bill.processing_time ?? bill.processing_time_seconds ?? bill.processing_duration_seconds;
+    if (typeof directValue === 'number') {
+        return formatDuration(directValue);
+    }
+    if (typeof directValue === 'string' && directValue.trim()) {
+        return directValue.trim();
+    }
+
+    const startMs = new Date(bill.upload_date || bill.created_at || 0).getTime();
+    const endMs = new Date(bill.completed_at || bill.updated_at || 0).getTime();
+    if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || startMs <= 0 || endMs <= 0 || endMs < startMs) {
+        return '-';
+    }
+    return formatDuration((endMs - startMs) / 1000);
 };
 
-const BillsTable = ({ bills, loading, onDeleteBill, deletingUploadId = null }) => {
+const getBillIdentifier = (bill) => bill?.bill_id || bill?.upload_id || bill?.temp_id || null;
+const getViewIdentifier = (bill) => bill?.bill_id || bill?.upload_id || null;
+
+const BillsTable = ({
+    bills,
+    loading,
+    onDeleteBill,
+    deletingUploadId = null,
+    deletedView = false,
+    onRestoreBill = null,
+    restoringUploadId = null,
+}) => {
     const navigate = useNavigate();
 
     const handleViewResult = (uploadId) => {
@@ -62,22 +92,26 @@ const BillsTable = ({ bills, loading, onDeleteBill, deletingUploadId = null }) =
 
     return (
         <TableContainer component={Paper} elevation={3}>
-            <Table sx={{ minWidth: 900 }}>
+            <Table sx={{ minWidth: 1050 }}>
                 <TableHead>
                     <TableRow sx={{ backgroundColor: 'grey.100' }}>
-                        <TableCell sx={{ fontWeight: 700, fontSize: '0.875rem' }}>Upload ID</TableCell>
-                        <TableCell sx={{ fontWeight: 700, fontSize: '0.875rem' }}>Filename</TableCell>
-                        <TableCell sx={{ fontWeight: 700, fontSize: '0.875rem' }}>Size</TableCell>
-                        <TableCell sx={{ fontWeight: 700, fontSize: '0.875rem' }}>Pages</TableCell>
+                        <TableCell sx={{ fontWeight: 700, fontSize: '0.875rem' }}>Employee ID</TableCell>
+                        <TableCell sx={{ fontWeight: 700, fontSize: '0.875rem' }}>Hospital Name</TableCell>
+                        <TableCell sx={{ fontWeight: 700, fontSize: '0.875rem' }}>Invoice Date</TableCell>
+                        <TableCell sx={{ fontWeight: 700, fontSize: '0.875rem' }}>Upload Date</TableCell>
+                        <TableCell sx={{ fontWeight: 700, fontSize: '0.875rem' }}>Processing Time</TableCell>
                         <TableCell sx={{ fontWeight: 700, fontSize: '0.875rem' }}>Status</TableCell>
-                        <TableCell sx={{ fontWeight: 700, fontSize: '0.875rem' }}>Grand Total</TableCell>
                         <TableCell align="center" sx={{ fontWeight: 700, fontSize: '0.875rem' }}>Action</TableCell>
                     </TableRow>
                 </TableHead>
                 <TableBody>
-                    {bills.map((bill) => (
+                    {bills.map((bill) => {
+                        const billId = getBillIdentifier(bill);
+                        const viewId = getViewIdentifier(bill);
+                        const rowKey = billId || `${bill.employee_id}-${bill.original_filename}-${bill.upload_date || ''}`;
+                        return (
                         <TableRow
-                            key={bill.upload_id}
+                            key={rowKey}
                             sx={{
                                 '&:hover': {
                                     backgroundColor: 'grey.50',
@@ -94,33 +128,37 @@ const BillsTable = ({ bills, loading, onDeleteBill, deletingUploadId = null }) =
                                         color: 'primary.main',
                                         fontWeight: 600,
                                     }}
-                                    title={bill.upload_id}
+                                    title={bill.employee_id}
                                 >
-                                    {truncateUploadId(bill.upload_id)}
+                                    {bill.employee_id || 'N/A'}
+                                </Typography>
+                            </TableCell>
+                            <TableCell>
+                                <Typography
+                                    variant="body2"
+                                    sx={{ fontSize: '0.875rem' }}
+                                    title={bill.hospital_name || 'N/A'}
+                                >
+                                    {bill.hospital_name || 'N/A'}
                                 </Typography>
                             </TableCell>
                             <TableCell>
                                 <Typography variant="body2" sx={{ fontSize: '0.875rem' }}>
-                                    {bill.original_filename || 'Unknown'}
+                                    {formatInvoiceDate(bill.invoice_date)}
                                 </Typography>
                             </TableCell>
                             <TableCell>
                                 <Typography variant="body2" sx={{ fontSize: '0.875rem' }}>
-                                    {formatFileSize(Number(bill.file_size_bytes || 0))}
+                                    {formatUploadDateTime(bill.upload_date)}
                                 </Typography>
                             </TableCell>
                             <TableCell>
                                 <Typography variant="body2" sx={{ fontSize: '0.875rem' }}>
-                                    {bill.page_count ?? 0}
+                                    {getProcessingTimeText(bill)}
                                 </Typography>
                             </TableCell>
                             <TableCell>
                                 <StatusBadge stage={bill.status} size="small" />
-                            </TableCell>
-                            <TableCell>
-                                <Typography variant="body2" sx={{ fontSize: '0.875rem' }}>
-                                    {formatCurrency(bill.grand_total)}
-                                </Typography>
                             </TableCell>
                             <TableCell align="center">
                                 <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 1 }}>
@@ -129,24 +167,37 @@ const BillsTable = ({ bills, loading, onDeleteBill, deletingUploadId = null }) =
                                             variant="contained"
                                             size="small"
                                             startIcon={<Visibility />}
-                                            onClick={() => handleViewResult(bill.upload_id)}
+                                            onClick={() => handleViewResult(viewId)}
+                                            disabled={!viewId}
                                             sx={{ textTransform: 'none', fontWeight: 600 }}
                                         >
-                                            View Result
+                                            View Details
                                         </Button>
                                     ) : (
                                         <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.875rem' }}>
                                             -
                                         </Typography>
                                     )}
+                                    {deletedView && (
+                                        <Button
+                                            variant="outlined"
+                                            size="small"
+                                            startIcon={<RestoreFromTrash />}
+                                            onClick={() => onRestoreBill?.(billId)}
+                                            disabled={!onRestoreBill || !billId || restoringUploadId === billId}
+                                            sx={{ textTransform: 'none', fontWeight: 600 }}
+                                        >
+                                            {restoringUploadId === billId ? 'Undoing...' : 'Undo'}
+                                        </Button>
+                                    )}
                                     <IconButton
                                         size="small"
                                         color="error"
-                                        onClick={() => onDeleteBill?.(bill.upload_id)}
-                                        disabled={!onDeleteBill || deletingUploadId === bill.upload_id}
+                                        onClick={() => onDeleteBill?.(billId)}
+                                        disabled={!onDeleteBill || !billId || deletingUploadId === billId}
                                         title="Delete Bill"
                                     >
-                                        {deletingUploadId === bill.upload_id ? (
+                                        {deletingUploadId === billId ? (
                                             <CircularProgress size={18} color="error" />
                                         ) : (
                                             <DeleteOutline fontSize="small" />
@@ -155,7 +206,8 @@ const BillsTable = ({ bills, loading, onDeleteBill, deletingUploadId = null }) =
                                 </Box>
                             </TableCell>
                         </TableRow>
-                    ))}
+                        );
+                    })}
                 </TableBody>
             </Table>
         </TableContainer>

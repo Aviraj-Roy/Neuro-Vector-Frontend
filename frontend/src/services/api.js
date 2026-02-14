@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
+const API_BASE_URL = (import.meta?.env?.VITE_API_BASE_URL) || '/api';
 
 const apiClient = axios.create({
     baseURL: API_BASE_URL,
@@ -29,9 +29,15 @@ apiClient.interceptors.response.use(
 );
 
 const normalizeStatus = (value) => String(value || 'uploaded').toUpperCase();
+const normalizeNullableDate = (value) => {
+    if (value === null || value === undefined) return null;
+    const trimmed = String(value).trim();
+    return trimmed || null;
+};
 
 const normalizeUploadResponse = (data) => ({
     upload_id: data?.upload_id || '',
+    employee_id: data?.employee_id || '',
     hospital_name: data?.hospital_name || '',
     message: data?.message || '',
     status: normalizeStatus(data?.status),
@@ -51,7 +57,7 @@ const normalizeStatusResponse = (data, uploadId) => ({
     file_size_bytes: Number(data?.file_size_bytes || 0),
 });
 
-const normalizeBillsResponse = (data) => {
+export const normalizeBillsResponse = (data) => {
     const rawBills = Array.isArray(data)
         ? data
         : Array.isArray(data?.bills)
@@ -59,7 +65,14 @@ const normalizeBillsResponse = (data) => {
             : [];
 
     return rawBills.map((bill) => ({
-        upload_id: bill?.upload_id || '',
+        bill_id: bill?.bill_id || bill?.upload_id || '',
+        upload_id: bill?.upload_id || bill?.bill_id || '',
+        employee_id: bill?.employee_id || '',
+        invoice_date: normalizeNullableDate(bill?.invoice_date),
+        upload_date: normalizeNullableDate(bill?.upload_date || bill?.created_at),
+        completed_at: normalizeNullableDate(bill?.completed_at),
+        processing_time: bill?.processing_time ?? null,
+        processing_time_seconds: bill?.processing_time_seconds ?? bill?.processing_duration_seconds ?? null,
         hospital_name: bill?.hospital_name || '',
         status: normalizeStatus(bill?.status),
         grand_total: bill?.grand_total ?? null,
@@ -69,6 +82,20 @@ const normalizeBillsResponse = (data) => {
         created_at: bill?.created_at || null,
         updated_at: bill?.updated_at || null,
     }));
+};
+
+export const buildUploadFormData = (file, hospitalName, employeeId, invoiceDate, clientRequestId) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('hospital_name', hospitalName);
+    formData.append('employee_id', employeeId);
+    if (invoiceDate) {
+        formData.append('invoice_date', invoiceDate);
+    }
+    if (clientRequestId) {
+        formData.append('client_request_id', clientRequestId);
+    }
+    return formData;
 };
 
 const normalizeBillDataResponse = (data, uploadId) => {
@@ -124,13 +151,8 @@ const normalizeHospitalsResponse = (data) => {
         .filter(Boolean);
 };
 
-export const uploadBill = async (file, hospitalName, clientRequestId) => {
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('hospital_name', hospitalName);
-    if (clientRequestId) {
-        formData.append('client_request_id', clientRequestId);
-    }
+export const uploadBill = async (file, hospitalName, employeeId, invoiceDate, clientRequestId) => {
+    const formData = buildUploadFormData(file, hospitalName, employeeId, invoiceDate, clientRequestId);
 
     const response = await apiClient.post('/upload', formData);
     return normalizeUploadResponse(response.data);

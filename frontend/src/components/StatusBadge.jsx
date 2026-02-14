@@ -40,6 +40,12 @@ const StatusBadge = ({ stage, size = 'small' }) => {
                     color: 'info',
                     icon: <CloudUpload sx={{ fontSize: 16 }} />,
                 };
+            case STAGES.PENDING:
+                return {
+                    label: 'Pending',
+                    color: 'warning',
+                    icon: <HourglassEmpty sx={{ fontSize: 16 }} />,
+                };
             case STAGES.PROCESSING:
                 return {
                     label: 'Processing',

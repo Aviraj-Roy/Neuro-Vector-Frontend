@@ -1,5 +1,6 @@
 // Backend lifecycle statuses
 export const STAGES = {
+    PENDING: 'PENDING',
     UPLOADED: 'UPLOADED',
     PROCESSING: 'PROCESSING',
     COMPLETED: 'COMPLETED',
@@ -13,6 +14,12 @@ export const STAGE_CONFIG = {
         description: 'Bill uploaded successfully',
         color: 'primary',
         icon: 'CloudUpload',
+    },
+    [STAGES.PENDING]: {
+        label: 'Pending',
+        description: 'Bill upload request accepted and queued',
+        color: 'warning',
+        icon: 'HourglassEmpty',
     },
     [STAGES.PROCESSING]: {
         label: 'Processing',
@@ -45,8 +52,8 @@ export const STAGE_ORDER = [
 export const TERMINAL_STAGES = [STAGES.COMPLETED, STAGES.FAILED];
 
 // Polling configuration
-export const POLLING_INTERVAL = 3000; // 3 seconds
-export const MAX_POLLING_ATTEMPTS = 200; // 10 minutes max (200 * 3s)
+export const POLLING_INTERVAL = 5000; // 5 seconds
+export const MAX_POLLING_ATTEMPTS = 200;
 
 // File upload configuration
 export const ACCEPTED_FILE_TYPES = {

@@ -4,7 +4,7 @@ import { POLLING_INTERVAL } from '../constants/stages';
 
 /**
  * Custom hook for polling all bills
- * Automatically polls /bills endpoint every 3 seconds
+ * Automatically polls /bills endpoint every 5 seconds
  * Stops polling when all bills are in terminal states
  * 
  * @returns {Object} { bills, loading, error, refetch }

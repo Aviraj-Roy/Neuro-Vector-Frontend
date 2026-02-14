@@ -11,7 +11,7 @@ import {
     TextField,
     Typography,
 } from '@mui/material';
-import { ArrowBack, Search } from '@mui/icons-material';
+import { ArrowBack } from '@mui/icons-material';
 import { getBillData, verifyBill } from '../services/api';
 import { STAGES } from '../constants/stages';
 import { parseVerificationResult } from '../utils/verificationResultParser';
@@ -26,11 +26,10 @@ const ResultPage = () => {
     const { uploadId: urlUploadId } = useParams();
     const navigate = useNavigate();
 
-    const [searchUploadId, setSearchUploadId] = useState(urlUploadId || '');
     const [billData, setBillData] = useState(null);
     const [parsedResult, setParsedResult] = useState(null);
     const [loading, setLoading] = useState(false);
-    const [loadingMessage, setLoadingMessage] = useState('Loading verification result...');
+    const [loadingMessage, setLoadingMessage] = useState('Loading billing details...');
     const [error, setError] = useState(null);
     const [filterExpanded, setFilterExpanded] = useState(true);
     const [searchText, setSearchText] = useState('');
@@ -64,9 +63,9 @@ const ResultPage = () => {
         setRawVerificationText(typeof rawVerificationResult === 'string' ? rawVerificationResult : '');
     };
 
-    const fetchBill = async (targetUploadId = searchUploadId) => {
+    const fetchBill = async (targetUploadId) => {
         if (!String(targetUploadId || '').trim()) {
-            setError('Please enter an Upload ID');
+            setError('Bill ID is missing in the URL.');
             return;
         }
 
@@ -105,7 +104,7 @@ const ResultPage = () => {
             );
         } finally {
             setLoading(false);
-            setLoadingMessage('Loading verification result...');
+            setLoadingMessage('Loading billing details...');
         }
     };
 
@@ -147,7 +146,7 @@ const ResultPage = () => {
             <Paper elevation={3} sx={{ p: 3, mb: 3 }}>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
                     <Typography variant="h4" sx={{ fontWeight: 700, color: 'primary.main' }}>
-                        Verification Result
+                        Billing Details
                     </Typography>
                     <Button
                         variant="outlined"
@@ -159,27 +158,6 @@ const ResultPage = () => {
                     </Button>
                 </Box>
 
-                <Box component="form" onSubmit={(event) => { event.preventDefault(); fetchBill(); }}>
-                    <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
-                        <TextField
-                            fullWidth
-                            label="Upload ID"
-                            value={searchUploadId}
-                            onChange={(event) => setSearchUploadId(event.target.value)}
-                            placeholder="Enter Upload ID"
-                            disabled={loading}
-                        />
-                        <Button
-                            type="submit"
-                            variant="contained"
-                            startIcon={loading ? <CircularProgress color="inherit" size={18} /> : <Search />}
-                            disabled={loading || !searchUploadId.trim()}
-                            sx={{ minWidth: 150 }}
-                        >
-                            {loading ? 'Loading...' : 'Fetch Result'}
-                        </Button>
-                    </Stack>
-                </Box>
             </Paper>
 
             {error && (
