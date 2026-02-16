@@ -96,3 +96,20 @@ export const subscribePendingUploads = (listener) => {
     window.addEventListener(EVENT_NAME, handler);
     return () => window.removeEventListener(EVENT_NAME, handler);
 };
+
+export const removePendingUploadById = (uploadId) => {
+    const target = String(uploadId || '');
+    if (!target) return;
+
+    const current = loadPendingUploads();
+    const next = current.filter((item) => {
+        const idCandidates = [item?.upload_id, item?.bill_id, item?.temp_id]
+            .map((value) => String(value || ''))
+            .filter(Boolean);
+        return !idCandidates.includes(target);
+    });
+
+    if (next.length !== current.length) {
+        savePendingUploads(next);
+    }
+};

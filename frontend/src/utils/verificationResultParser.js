@@ -12,6 +12,17 @@ const ITEM_KEY_ALIASES = {
     'similarity score': 'similarity',
     'allowed': 'allowedAmount',
     'allowed amount': 'allowedAmount',
+    'tieup rate': 'tieupRate',
+    'tie-up rate': 'tieupRate',
+    'tieup rates': 'tieupRate',
+    'qty': 'qty',
+    'quantity': 'qty',
+    'rate': 'rate',
+    'unit rate': 'rate',
+    'item rate': 'rate',
+    'amount to be paid': 'amountToBePaid',
+    'payable amount': 'amountToBePaid',
+    'amount payable': 'amountToBePaid',
     'billed': 'billedAmount',
     'billed amount': 'billedAmount',
     'extra': 'extraAmount',
@@ -112,6 +123,10 @@ const addItemToCategory = (categoryMap, categoryName, rawItem) => {
         bestMatch: String(rawItem.bestMatch || '').trim(),
         similarity: parseSimilarity(rawItem.similarity),
         allowedAmount: parseAmount(rawItem.allowedAmount),
+        tieupRate: parseAmount(rawItem.tieupRate ?? rawItem.allowedAmount),
+        qty: parseAmount(rawItem.qty),
+        rate: parseAmount(rawItem.rate),
+        amountToBePaid: parseAmount(rawItem.amountToBePaid ?? rawItem.allowedAmount),
         billedAmount: parseAmount(rawItem.billedAmount),
         extraAmount: parseAmount(rawItem.extraAmount),
         decision: normalizeDecision(rawItem.decision),
@@ -182,6 +197,18 @@ const buildTableIndexMap = (headerCells) => {
         if (normalized.includes('best match')) map.bestMatch = idx;
         if (normalized.includes('similarity')) map.similarity = idx;
         if (normalized === 'allowed' || normalized.includes('allowed amount')) map.allowedAmount = idx;
+        if ((normalized.includes('tieup') || normalized.includes('tie-up')) && normalized.includes('rate')) {
+            map.tieupRate = idx;
+        }
+        if (normalized === 'qty' || normalized.includes('quantity')) map.qty = idx;
+        if ((normalized === 'rate' || normalized.includes('unit rate') || normalized.includes('item rate'))
+            && !normalized.includes('tieup')
+            && !normalized.includes('tie-up')) {
+            map.rate = idx;
+        }
+        if (normalized.includes('amount to be paid') || normalized.includes('payable amount')) {
+            map.amountToBePaid = idx;
+        }
         if (normalized === 'billed' || normalized.includes('billed amount')) map.billedAmount = idx;
         if (normalized === 'extra' || normalized.includes('extra amount')) map.extraAmount = idx;
         if (normalized.includes('decision')) map.decision = idx;
@@ -263,6 +290,10 @@ export const parseVerificationResult = (rawText) => {
                 bestMatch: cells[tableIndexMap.bestMatch] || '',
                 similarity: cells[tableIndexMap.similarity] || '',
                 allowedAmount: cells[tableIndexMap.allowedAmount] || '',
+                tieupRate: cells[tableIndexMap.tieupRate] || '',
+                qty: cells[tableIndexMap.qty] || '',
+                rate: cells[tableIndexMap.rate] || '',
+                amountToBePaid: cells[tableIndexMap.amountToBePaid] || '',
                 billedAmount: cells[tableIndexMap.billedAmount] || '',
                 extraAmount: cells[tableIndexMap.extraAmount] || '',
                 decision: cells[tableIndexMap.decision] || '',

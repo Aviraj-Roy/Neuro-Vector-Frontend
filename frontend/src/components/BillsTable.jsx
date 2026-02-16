@@ -34,24 +34,32 @@ const formatDuration = (seconds) => {
 
 const getProcessingTimeText = (bill) => {
     if (!bill || typeof bill !== 'object') return '-';
+    const status = String(bill.status || '').toUpperCase();
 
-    const directValue = bill.processing_time ?? bill.processing_time_seconds ?? bill.processing_duration_seconds;
-    if (typeof directValue === 'number') {
-        return formatDuration(directValue);
-    }
-    if (typeof directValue === 'string' && directValue.trim()) {
-        return directValue.trim();
-    }
-
-    const startMs = new Date(bill.upload_date || bill.created_at || 0).getTime();
-    const endMs = new Date(bill.completed_at || bill.updated_at || 0).getTime();
-    if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || startMs <= 0 || endMs <= 0 || endMs < startMs) {
+    if (status === STAGES.PENDING || status === STAGES.UPLOADED) {
         return '-';
     }
+
+    const startMs = new Date(
+        bill.processing_started_at
+        ?? bill.processingStartedAt
+        ?? 0
+    ).getTime();
+    if (!Number.isFinite(startMs) || startMs <= 0) {
+        return '-';
+    }
+
+    if (status === STAGES.PROCESSING) {
+        return formatDuration((Date.now() - startMs) / 1000);
+    }
+
+    const endMs = new Date(bill.completed_at || bill.updated_at || 0).getTime();
+    if (!Number.isFinite(endMs) || endMs <= 0 || endMs < startMs) return '-';
+
     return formatDuration((endMs - startMs) / 1000);
 };
 
-const getBillIdentifier = (bill) => bill?.bill_id || bill?.upload_id || bill?.temp_id || null;
+const getBillIdentifier = (bill) => bill?.upload_id || bill?.bill_id || bill?.temp_id || null;
 const getViewIdentifier = (bill) => bill?.bill_id || bill?.upload_id || null;
 
 const BillsTable = ({
@@ -193,7 +201,7 @@ const BillsTable = ({
                                     <IconButton
                                         size="small"
                                         color="error"
-                                        onClick={() => onDeleteBill?.(billId)}
+                                        onClick={() => onDeleteBill?.(bill)}
                                         disabled={!onDeleteBill || !billId || deletingUploadId === billId}
                                         title="Delete Bill"
                                     >

@@ -54,3 +54,19 @@ test('normalizeBillsResponse maps invoice_date and upload_date with backward com
     assert.equal(rows[1].invoice_date, null);
     assert.equal(rows[1].upload_date, '2026-02-14T11:00:00Z');
 });
+
+test('normalizeBillsResponse maps camelCase processing-time fields', () => {
+    const rows = normalizeBillsResponse([
+        {
+            billId: 'b3',
+            employee_id: '11223344',
+            upload_date: '2026-02-14T10:00:00Z',
+            processingTime: '42',
+            processingTimeSeconds: 84,
+            status: 'completed',
+        },
+    ]);
+
+    assert.equal(rows[0].processing_time, '42');
+    assert.equal(rows[0].processing_time_seconds, 84);
+});

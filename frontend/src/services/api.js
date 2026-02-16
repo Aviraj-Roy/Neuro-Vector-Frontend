@@ -29,6 +29,13 @@ apiClient.interceptors.response.use(
 );
 
 const normalizeStatus = (value) => String(value || 'uploaded').toUpperCase();
+const hasNonEmptyValue = (value) => {
+    if (value === null || value === undefined) return false;
+    if (typeof value === 'string') return value.trim().length > 0;
+    if (Array.isArray(value)) return value.length > 0;
+    if (typeof value === 'object') return Object.keys(value).length > 0;
+    return true;
+};
 const normalizeNullableDate = (value) => {
     if (value === null || value === undefined) return null;
     const trimmed = String(value).trim();
@@ -64,24 +71,37 @@ export const normalizeBillsResponse = (data) => {
             ? data.bills
             : [];
 
-    return rawBills.map((bill) => ({
+    return rawBills.map((bill) => {
+        const rawVerification = bill?.verification_result ?? bill?.verificationResult ?? bill?.result;
+        const explicitReady = bill?.details_ready ?? bill?.result_ready ?? bill?.is_result_ready ?? bill?.has_verification_result;
+        const hasExplicitReady = explicitReady !== null && explicitReady !== undefined;
+        const hasRawVerification = rawVerification !== null && rawVerification !== undefined;
+        return ({
         bill_id: bill?.bill_id || bill?.upload_id || '',
         upload_id: bill?.upload_id || bill?.bill_id || '',
         employee_id: bill?.employee_id || '',
         invoice_date: normalizeNullableDate(bill?.invoice_date),
         upload_date: normalizeNullableDate(bill?.upload_date || bill?.created_at),
         completed_at: normalizeNullableDate(bill?.completed_at),
-        processing_time: bill?.processing_time ?? null,
-        processing_time_seconds: bill?.processing_time_seconds ?? bill?.processing_duration_seconds ?? null,
+        processing_started_at: normalizeNullableDate(
+            bill?.processing_started_at ?? bill?.processingStartedAt ?? bill?.processing_start_time
+        ),
+        processing_time: bill?.processing_time ?? bill?.processingTime ?? null,
+        processing_time_seconds: bill?.processing_time_seconds ?? bill?.processing_duration_seconds ?? bill?.processingTimeSeconds ?? bill?.processingDurationSeconds ?? null,
         hospital_name: bill?.hospital_name || '',
         status: normalizeStatus(bill?.status),
+        details_ready: hasExplicitReady
+            ? Boolean(explicitReady)
+            : (hasRawVerification ? hasNonEmptyValue(rawVerification) : null),
+        verification_result: rawVerification ?? null,
         grand_total: bill?.grand_total ?? null,
         page_count: Number(bill?.page_count || 0),
         original_filename: bill?.original_filename || 'Unknown',
         file_size_bytes: Number(bill?.file_size_bytes || 0),
         created_at: bill?.created_at || null,
         updated_at: bill?.updated_at || null,
-    }));
+        });
+    });
 };
 
 export const buildUploadFormData = (file, hospitalName, employeeId, invoiceDate, clientRequestId) => {
@@ -168,9 +188,20 @@ export const getAllBills = async () => {
     return normalizeBillsResponse(response.data);
 };
 
-export const deleteBill = async (uploadId) => {
-    const response = await apiClient.delete(`/bills/${uploadId}`);
-    return response.data;
+export const deleteBill = async (uploadId, permanent = true) => {
+    const params = permanent ? { permanent: true } : undefined;
+    try {
+        const response = await apiClient.delete(`/bills/${uploadId}`, { params });
+        return response.data;
+    } catch (error) {
+        const status = error?.response?.status;
+        // Some backend versions expose DELETE /bill/{id} instead of /bills/{id}.
+        if (status === 404 || status === 405) {
+            const fallbackResponse = await apiClient.delete(`/bill/${uploadId}`, { params });
+            return fallbackResponse.data;
+        }
+        throw error;
+    }
 };
 
 export const getBillData = async (uploadId) => {

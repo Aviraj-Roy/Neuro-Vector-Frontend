@@ -8,13 +8,13 @@ import {
     Container,
     Paper,
     Stack,
-    TextField,
     Typography,
 } from '@mui/material';
 import { ArrowBack } from '@mui/icons-material';
 import { getBillData, verifyBill } from '../services/api';
 import { STAGES } from '../constants/stages';
 import { parseVerificationResult } from '../utils/verificationResultParser';
+import { applyBillEdits, saveBillEdits } from '../utils/billEditsStorage';
 import VerificationSummaryCard from '../components/results/VerificationSummaryCard';
 import FinancialSummaryCard from '../components/results/FinancialSummaryCard';
 import ResultFilters from '../components/results/ResultFilters';
@@ -25,18 +25,18 @@ const normalizeText = (value) => String(value || '').toLowerCase();
 const ResultPage = () => {
     const { uploadId: urlUploadId } = useParams();
     const navigate = useNavigate();
+    const [isEditMode, setIsEditMode] = useState(false);
 
     const [billData, setBillData] = useState(null);
     const [parsedResult, setParsedResult] = useState(null);
     const [loading, setLoading] = useState(false);
     const [loadingMessage, setLoadingMessage] = useState('Loading billing details...');
     const [error, setError] = useState(null);
+    const [saveError, setSaveError] = useState(null);
+    const [saving, setSaving] = useState(false);
     const [filterExpanded, setFilterExpanded] = useState(true);
     const [searchText, setSearchText] = useState('');
     const [selectedDecisions, setSelectedDecisions] = useState([]);
-    const [rawVerificationText, setRawVerificationText] = useState('');
-    const [showRawText, setShowRawText] = useState(false);
-
     const handleDecisionToggle = (decision) => {
         setSelectedDecisions((prev) => (
             prev.includes(decision) ? prev.filter((item) => item !== decision) : [...prev, decision]
@@ -47,6 +47,24 @@ const ResultPage = () => {
         setSearchText('');
         setSelectedDecisions([]);
     };
+
+    const handleUpdateCategoryItem = React.useCallback((categoryName, itemIndex, updates) => {
+        setParsedResult((prev) => {
+            if (!prev?.categories) return prev;
+            return {
+                ...prev,
+                categories: prev.categories.map((category) => {
+                    if (category.name !== categoryName) return category;
+                    return {
+                        ...category,
+                        items: category.items.map((item, index) => (
+                            index === itemIndex ? { ...item, ...updates } : item
+                        )),
+                    };
+                }),
+            };
+        });
+    }, []);
 
     const parseAndSetResult = (rawVerificationResult, financialTotals = null) => {
         const parsed = parseVerificationResult(rawVerificationResult);
@@ -59,8 +77,7 @@ const ResultPage = () => {
                 totalUnclassified: Number(financialTotals.total_unclassified || 0),
             };
         }
-        setParsedResult(parsed);
-        setRawVerificationText(typeof rawVerificationResult === 'string' ? rawVerificationResult : '');
+        setParsedResult(applyBillEdits(urlUploadId, parsed));
     };
 
     const fetchBill = async (targetUploadId) => {
@@ -75,8 +92,6 @@ const ResultPage = () => {
             setError(null);
             setBillData(null);
             setParsedResult(null);
-            setRawVerificationText('');
-
             const requestedId = targetUploadId.trim();
             let data = await getBillData(requestedId);
 
@@ -140,9 +155,23 @@ const ResultPage = () => {
     }, [parsedResult, searchText, selectedDecisions]);
 
     const hasData = Boolean(parsedResult && billData);
+    const handleEnterEditMode = () => setIsEditMode(true);
+    const handleSaveEdits = () => {
+        if (!urlUploadId || !parsedResult) return;
+        try {
+            setSaving(true);
+            setSaveError(null);
+            saveBillEdits(urlUploadId, parsedResult);
+            setIsEditMode(false);
+        } catch (err) {
+            setSaveError(err?.message || 'Failed to save edits.');
+        } finally {
+            setSaving(false);
+        }
+    };
 
     return (
-        <Container maxWidth="xl" sx={{ py: 4 }}>
+        <Container maxWidth={false} sx={{ py: 4, px: { xs: 1.5, md: 3 } }}>
             <Paper elevation={3} sx={{ p: 3, mb: 3 }}>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
                     <Typography variant="h4" sx={{ fontWeight: 700, color: 'primary.main' }}>
@@ -151,10 +180,10 @@ const ResultPage = () => {
                     <Button
                         variant="outlined"
                         startIcon={<ArrowBack />}
-                        onClick={() => navigate('/dashboard')}
+                        onClick={() => (isEditMode ? setIsEditMode(false) : navigate('/dashboard'))}
                         sx={{ textTransform: 'none' }}
                     >
-                        Back to Dashboard
+                        {isEditMode ? 'Exit Edit Mode' : 'Back to Dashboard'}
                     </Button>
                 </Box>
 
@@ -163,6 +192,11 @@ const ResultPage = () => {
             {error && (
                 <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError(null)}>
                     {error}
+                </Alert>
+            )}
+            {saveError && (
+                <Alert severity="error" sx={{ mb: 3 }} onClose={() => setSaveError(null)}>
+                    {saveError}
                 </Alert>
             )}
 
@@ -181,6 +215,11 @@ const ResultPage = () => {
                     only after completion.
                 </Alert>
             )}
+            {isEditMode && hasData && (
+                <Alert severity="info" sx={{ mb: 3 }}>
+                    Edit mode is active. Update values directly in the table rows, then click Save Changes.
+                </Alert>
+            )}
 
             {hasData && (
                 <Stack spacing={3}>
@@ -189,42 +228,6 @@ const ResultPage = () => {
                             Parser warnings: {parsedResult.warnings.join(' ')}
                         </Alert>
                     )}
-
-                    <Paper elevation={1} sx={{ p: 2 }}>
-                        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} alignItems={{ xs: 'stretch', sm: 'center' }}>
-                            <Typography variant="subtitle1" sx={{ fontWeight: 700, flex: 1 }}>
-                                Raw Verification Text
-                            </Typography>
-                            <Typography variant="body2" color="text.secondary">
-                                Format: {billData?.formatVersion || 'unknown'}
-                            </Typography>
-                            <Button
-                                variant="outlined"
-                                size="small"
-                                onClick={() => setShowRawText((prev) => !prev)}
-                            >
-                                {showRawText ? 'Hide Raw Text' : 'Show Raw Text'}
-                            </Button>
-                        </Stack>
-                        {showRawText && (
-                            <Box sx={{ mt: 2 }}>
-                                <TextField
-                                    fullWidth
-                                    multiline
-                                    minRows={8}
-                                    maxRows={24}
-                                    value={rawVerificationText || ''}
-                                    InputProps={{
-                                        readOnly: true,
-                                        sx: {
-                                            fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
-                                            fontSize: 13,
-                                        },
-                                    }}
-                                />
-                            </Box>
-                        )}
-                    </Paper>
 
                     <VerificationSummaryCard summary={parsedResult.summary} />
                     <FinancialSummaryCard financial={parsedResult.financial} />
@@ -238,6 +241,25 @@ const ResultPage = () => {
                         onDecisionToggle={handleDecisionToggle}
                         onClearFilters={handleClearFilters}
                     />
+                    {isEditMode && (
+                        <Box sx={{ display: 'flex', justifyContent: 'flex-start' }}>
+                            <Button
+                                variant="contained"
+                                onClick={handleSaveEdits}
+                                disabled={saving}
+                                sx={{ textTransform: 'none' }}
+                            >
+                                {saving ? 'Saving...' : 'Save Changes'}
+                            </Button>
+                        </Box>
+                    )}
+                    {!isEditMode && (
+                        <Box sx={{ display: 'flex', justifyContent: 'flex-start' }}>
+                            <Button variant="contained" onClick={handleEnterEditMode} sx={{ textTransform: 'none' }}>
+                                Edit All Items
+                            </Button>
+                        </Box>
+                    )}
 
                     {filteredCategories.length === 0 ? (
                         <Alert severity="info">
@@ -245,7 +267,12 @@ const ResultPage = () => {
                         </Alert>
                     ) : (
                         filteredCategories.map((category) => (
-                            <CategoryResultTable key={category.name} category={category} />
+                            <CategoryResultTable
+                                key={category.name}
+                                category={category}
+                                onUpdateItem={handleUpdateCategoryItem}
+                                isEditMode={isEditMode}
+                            />
                         ))
                     )}
                 </Stack>

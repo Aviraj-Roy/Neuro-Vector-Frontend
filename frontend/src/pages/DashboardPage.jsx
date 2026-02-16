@@ -19,10 +19,13 @@ import { STAGES } from '../constants/stages';
 import {
     loadPendingUploads,
     pruneSyncedPendingUploads,
+    removePendingUploadById,
     subscribePendingUploads,
 } from '../utils/pendingUploads';
 
 const DELETED_BILLS_STORAGE_KEY = 'dashboard_deleted_bills';
+const AUTO_PERMANENT_DELETE_DAYS = 30;
+const AUTO_PERMANENT_DELETE_MS = AUTO_PERMANENT_DELETE_DAYS * 24 * 60 * 60 * 1000;
 
 const loadDeletedBills = () => {
     try {
@@ -43,8 +46,149 @@ const saveDeletedBills = (items) => {
     }
 };
 
-const getBillIdentifier = (bill) => bill?.bill_id || bill?.upload_id || bill?.temp_id || null;
-const getBackendBillId = (bill) => bill?.upload_id || bill?.bill_id || null;
+const getBillIdentifier = (bill) => bill?.upload_id || bill?.bill_id || bill?.temp_id || null;
+const toIdentifierKey = (value) => (value === null || value === undefined ? '' : String(value));
+const isTempIdentifier = (value) => toIdentifierKey(value).startsWith('tmp-');
+const getDeletedAtMs = (bill) => new Date(
+    bill?.deleted_at || bill?.deletedAt || bill?.updated_at || 0
+).getTime();
+const matchesIdentifier = (bill, uploadId) => {
+    const target = toIdentifierKey(uploadId);
+    return [
+        bill?.upload_id,
+        bill?.bill_id,
+        bill?.temp_id,
+    ].map(toIdentifierKey).some((id) => id && id === target);
+};
+const getDeleteCandidates = (bill, clickedId) => {
+    const ordered = [
+        bill?.upload_id,
+        bill?.bill_id,
+        clickedId,
+    ].map(toIdentifierKey).filter(Boolean);
+    const deduped = [...new Set(ordered)];
+    return deduped.filter((id) => !isTempIdentifier(id));
+};
+const getIdentifierKeys = (bill, extraId = null) => new Set(
+    [
+        bill?.upload_id,
+        bill?.bill_id,
+        bill?.temp_id,
+        extraId,
+    ].map(toIdentifierKey).filter(Boolean)
+);
+const isNotFoundDeleteError = (error) => {
+    const status = error?.response?.status;
+    return status === 404;
+};
+const isPermanentDeletePreconditionError = (error) => {
+    const message = String(
+        error?.response?.data?.message
+        || error?.response?.data?.detail
+        || error?.message
+        || ''
+    ).toLowerCase();
+    return message.includes('permanent delete is allowed only for deleted bills');
+};
+const resolveDeleteRequest = (billOrId) => {
+    if (billOrId && typeof billOrId === 'object') {
+        return {
+            clickedBill: billOrId,
+            clickedId: getBillIdentifier(billOrId),
+        };
+    }
+    return {
+        clickedBill: null,
+        clickedId: billOrId,
+    };
+};
+const ACTIVE_STATUSES = new Set([STAGES.UPLOADED, STAGES.PENDING, STAGES.PROCESSING]);
+const TERMINAL_STATUSES = new Set([STAGES.COMPLETED, STAGES.FAILED]);
+const NON_DELETED_VIEW_STATUSES = new Set([
+    STAGES.UPLOADED,
+    STAGES.PENDING,
+    STAGES.PROCESSING,
+    STAGES.FAILED,
+]);
+const getNormalizedStatus = (bill) => String(bill?.status || '').toUpperCase();
+const hasNonEmptyValue = (value) => {
+    if (value === null || value === undefined) return false;
+    if (typeof value === 'string') return value.trim().length > 0;
+    if (Array.isArray(value)) return value.length > 0;
+    if (typeof value === 'object') return Object.keys(value).length > 0;
+    return true;
+};
+const isBillDetailsReady = (bill) => {
+    const explicit = bill?.details_ready ?? bill?.detailsReady ?? bill?.result_ready ?? bill?.resultReady;
+    if (typeof explicit === 'boolean') return explicit;
+    if (explicit !== null && explicit !== undefined) return Boolean(explicit);
+    const rawVerification = bill?.verification_result ?? bill?.verificationResult ?? bill?.result;
+    if (rawVerification === null || rawVerification === undefined) {
+        return true;
+    }
+    return hasNonEmptyValue(rawVerification);
+};
+const getQueueStatus = (bill) => {
+    const normalized = getNormalizedStatus(bill);
+    if (normalized === STAGES.COMPLETED && !isBillDetailsReady(bill)) {
+        return STAGES.PROCESSING;
+    }
+    return normalized;
+};
+
+const getBillTimeMs = (bill) => new Date(
+    bill?.upload_date || bill?.created_at || bill?.updated_at || 0
+).getTime();
+
+const applySequentialQueueStatus = (rows, startTimeMap) => {
+    const next = (rows || []).map((item) => ({ ...item }));
+    const activeRows = next
+        .map((row, index) => ({ row, index }))
+        .filter(({ row }) => ACTIVE_STATUSES.has(getQueueStatus(row)))
+        .sort((a, b) => getBillTimeMs(a.row) - getBillTimeMs(b.row));
+
+    const processingCandidate = activeRows[0];
+    const keepProcessingIndex = processingCandidate?.index ?? -1;
+    const nowIso = new Date().toISOString();
+
+    const mapped = next.map((row, index) => {
+        const rowId = getBillIdentifier(row);
+        const normalized = getQueueStatus(row);
+        const existingStart = row?.processing_started_at || row?.processingStartedAt || startTimeMap.get(rowId);
+
+        if (rowId && existingStart) {
+            startTimeMap.set(rowId, existingStart);
+        }
+
+        if (index === keepProcessingIndex && ACTIVE_STATUSES.has(normalized)) {
+            if (rowId && !existingStart) {
+                startTimeMap.set(rowId, nowIso);
+            }
+            return {
+                ...row,
+                status: STAGES.PROCESSING,
+                processing_started_at: existingStart || nowIso,
+            };
+        }
+        if (ACTIVE_STATUSES.has(normalized)) {
+            return { ...row, status: STAGES.PENDING };
+        }
+        if (TERMINAL_STATUSES.has(normalized) && existingStart && !row?.processing_started_at) {
+            return {
+                ...row,
+                processing_started_at: existingStart,
+            };
+        }
+        return row;
+    });
+
+    const visibleIds = new Set(next.map((row) => getBillIdentifier(row)).filter(Boolean));
+    Array.from(startTimeMap.keys()).forEach((key) => {
+        if (!visibleIds.has(key)) startTimeMap.delete(key);
+    });
+
+    return mapped;
+};
 
 /**
  * Dashboard Page Component
@@ -64,46 +208,120 @@ const DashboardPage = () => {
     const [pendingUploads, setPendingUploads] = React.useState(() => loadPendingUploads());
     const [deletedBills, setDeletedBills] = React.useState(() => loadDeletedBills());
     const [restoringUploadId, setRestoringUploadId] = React.useState(null);
+    const queueStartTimesRef = React.useRef(new Map());
+    const autoDeleteInFlightRef = React.useRef(false);
     const showDeleted = billScope === 'DELETED';
 
     const handleUploadNew = () => {
         navigate('/upload');
     };
 
-    const handleDeleteBill = async (uploadId) => {
-        if (!uploadId) return;
+    const handleDeleteBill = async (billOrId) => {
+        const { clickedBill, clickedId } = resolveDeleteRequest(billOrId);
+        if (!clickedId) return;
 
         const confirmed = showDeleted
-            ? window.confirm(`Permanently delete bill ${uploadId}? This action cannot be undone.`)
-            : window.confirm(`Temporarily delete bill ${uploadId}? You can find it in Deleted view.`);
+            ? window.confirm(`Permanently delete bill ${clickedId}? This action cannot be undone.`)
+            : window.confirm(`Temporarily delete bill ${clickedId}? You can restore it from Deleted Bills.`);
         if (!confirmed) return;
 
         try {
             setDeleteError(null);
-            setDeletingUploadId(uploadId);
+            setDeletingUploadId(clickedId);
             const currentBills = [...(pendingUploads || []), ...(bills || [])];
-            const billToDelete = (showDeleted ? deletedBills : currentBills).find((bill) => {
-                return getBillIdentifier(bill) === uploadId;
-            });
+            const billToDelete = (clickedBill && typeof clickedBill === 'object')
+                ? clickedBill
+                : (showDeleted ? deletedBills : currentBills).find((bill) => {
+                    return matchesIdentifier(bill, clickedId);
+                });
 
-            if (showDeleted) {
-                // Permanent delete: call backend delete and remove from Deleted view
-                const backendBillId = getBackendBillId(billToDelete);
-                if (backendBillId) {
-                    await deleteBill(backendBillId);
-                }
+            const removeBillFromDeleted = () => {
+                const removableKeys = getIdentifierKeys(billToDelete, clickedId);
                 setDeletedBills((prev) => {
-                    const next = prev.filter((item) => getBillIdentifier(item) !== uploadId);
+                    const next = prev.filter((item) => {
+                        if (item === clickedBill) return false;
+                        if (matchesIdentifier(item, clickedId)) return false;
+                        const itemKeys = getIdentifierKeys(item);
+                        return !Array.from(itemKeys).some((key) => removableKeys.has(key));
+                    });
                     saveDeletedBills(next);
                     return next;
                 });
-                await refetch();
-            } else if (billToDelete) {
-                // Temporary delete: hide from dashboard and move to Deleted view locally
+            };
+
+            if (!billToDelete && showDeleted) {
+                removeBillFromDeleted();
+                return;
+            }
+
+            if (!billToDelete && !showDeleted) {
+                return;
+            }
+
+            if (showDeleted) {
+                const deleteCandidates = getDeleteCandidates(billToDelete, clickedId);
+                if (deleteCandidates.length === 0) {
+                    removeBillFromDeleted();
+                    Array.from(getIdentifierKeys(billToDelete, clickedId)).forEach((key) => removePendingUploadById(key));
+                    setPendingUploads((prev) => prev.filter((item) => {
+                        const itemKeys = getIdentifierKeys(item);
+                        return !Array.from(itemKeys).some((key) => getIdentifierKeys(billToDelete, clickedId).has(key));
+                    }));
+                    return;
+                }
+
+                let deleted = false;
+                let lastError = null;
+                let allNotFound = true;
+                for (const candidateId of deleteCandidates) {
+                    try {
+                        await deleteBill(candidateId);
+                        deleted = true;
+                        allNotFound = false;
+                        break;
+                    } catch (error) {
+                        if (isPermanentDeletePreconditionError(error)) {
+                            try {
+                                // Some backend versions require a soft-delete before permanent delete.
+                                await deleteBill(candidateId, false);
+                                await deleteBill(candidateId, true);
+                                deleted = true;
+                                allNotFound = false;
+                                break;
+                            } catch (followUpError) {
+                                lastError = followUpError;
+                                if (!isNotFoundDeleteError(followUpError)) {
+                                    allNotFound = false;
+                                }
+                            }
+                        } else {
+                            lastError = error;
+                            if (!isNotFoundDeleteError(error)) {
+                                allNotFound = false;
+                            }
+                        }
+                    }
+                }
+                // If backend says "not found" for all candidate IDs, treat as already deleted.
+                if (deleted || allNotFound) {
+                    removeBillFromDeleted();
+                    await refetch();
+                    return;
+                }
+                if (!deleted) {
+                    setDeleteError(
+                        lastError?.response?.data?.message
+                        || lastError?.response?.data?.detail
+                        || lastError?.message
+                        || 'Failed to permanently delete bill.'
+                    );
+                    return;
+                }
+            } else {
                 setDeletedBills((prev) => {
                     const next = [
                         { ...billToDelete, deleted_at: new Date().toISOString(), is_temporary_deleted: true },
-                        ...prev.filter((item) => getBillIdentifier(item) !== uploadId),
+                        ...prev.filter((item) => !matchesIdentifier(item, clickedId)),
                     ];
                     saveDeletedBills(next);
                     return next;
@@ -125,7 +343,7 @@ const DashboardPage = () => {
         if (!uploadId) return;
         setRestoringUploadId(uploadId);
         setDeletedBills((prev) => {
-            const next = prev.filter((item) => getBillIdentifier(item) !== uploadId);
+            const next = prev.filter((item) => !matchesIdentifier(item, uploadId));
             saveDeletedBills(next);
             return next;
         });
@@ -140,8 +358,103 @@ const DashboardPage = () => {
     }, []);
 
     React.useEffect(() => {
+        // Keep Deleted view focused on terminal rows only.
+        setDeletedBills((prev) => {
+            const next = prev.filter((item) => !NON_DELETED_VIEW_STATUSES.has(getNormalizedStatus(item)));
+            if (next.length !== prev.length) {
+                saveDeletedBills(next);
+            }
+            return next;
+        });
+    }, []);
+
+    React.useEffect(() => {
         pruneSyncedPendingUploads(bills);
     }, [bills]);
+
+    React.useEffect(() => {
+        let isCancelled = false;
+
+        const autoPermanentDeleteOldBills = async () => {
+            if (autoDeleteInFlightRef.current) return;
+
+            const nowMs = Date.now();
+            const expiredBills = deletedBills.filter((item) => {
+                const deletedAtMs = getDeletedAtMs(item);
+                return Number.isFinite(deletedAtMs) && deletedAtMs > 0 && (nowMs - deletedAtMs) >= AUTO_PERMANENT_DELETE_MS;
+            });
+            if (expiredBills.length === 0) return;
+
+            autoDeleteInFlightRef.current = true;
+            try {
+                const targets = expiredBills.map((item) => ({
+                    item,
+                    key: toIdentifierKey(getBillIdentifier(item)),
+                    backendIds: getDeleteCandidates(item, getBillIdentifier(item)),
+                }));
+
+                const removableKeys = new Set();
+                let failedCount = 0;
+                for (const target of targets) {
+                    const key = target?.key;
+                    if (!key) continue;
+
+                    if (!target.backendIds.length) {
+                        removableKeys.add(key);
+                        continue;
+                    }
+
+                    let deleted = false;
+                    let lastError = null;
+                    let allNotFound = true;
+                    for (const candidateId of target.backendIds) {
+                        try {
+                            await deleteBill(candidateId);
+                            deleted = true;
+                            allNotFound = false;
+                            break;
+                        } catch (error) {
+                            lastError = error;
+                            if (!isNotFoundDeleteError(error)) {
+                                allNotFound = false;
+                            }
+                        }
+                    }
+
+                    if (deleted || allNotFound) {
+                        removableKeys.add(key);
+                    } else {
+                        failedCount += 1;
+                        console.error('Auto permanent delete failed for bill candidates:', target.backendIds, lastError);
+                    }
+                }
+
+                if (!isCancelled && removableKeys.size > 0) {
+                    setDeletedBills((prev) => {
+                        const next = prev.filter((item) => !removableKeys.has(toIdentifierKey(getBillIdentifier(item))));
+                        if (next.length !== prev.length) {
+                            saveDeletedBills(next);
+                        }
+                        return next;
+                    });
+                    await refetch();
+                }
+
+                if (!isCancelled && failedCount > 0) {
+                    setDeleteError(`Auto-delete failed for ${failedCount} expired bill(s).`);
+                }
+            } finally {
+                autoDeleteInFlightRef.current = false;
+            }
+        };
+
+        autoPermanentDeleteOldBills();
+        const intervalId = window.setInterval(autoPermanentDeleteOldBills, 60 * 60 * 1000);
+        return () => {
+            isCancelled = true;
+            window.clearInterval(intervalId);
+        };
+    }, [deletedBills, refetch]);
 
     const mergedBills = React.useMemo(() => {
         const serverBills = bills || [];
@@ -158,6 +471,10 @@ const DashboardPage = () => {
     }, [bills, pendingUploads]);
 
     const sourceBills = showDeleted ? deletedBills : mergedBills;
+    const queueAwareSourceBills = React.useMemo(() => {
+        if (showDeleted) return sourceBills;
+        return applySequentialQueueStatus(sourceBills, queueStartTimesRef.current);
+    }, [sourceBills, showDeleted]);
     const deletedIds = React.useMemo(
         () => new Set(deletedBills.map((item) => getBillIdentifier(item)).filter(Boolean)),
         [deletedBills]
@@ -165,11 +482,11 @@ const DashboardPage = () => {
 
     const hospitalOptions = React.useMemo(() => {
         return [...new Set(
-            sourceBills
+            queueAwareSourceBills
                 .map((bill) => String(bill?.hospital_name || '').trim())
                 .filter(Boolean)
         )].sort((a, b) => a.localeCompare(b));
-    }, [sourceBills]);
+    }, [queueAwareSourceBills]);
 
     const filteredBills = React.useMemo(() => {
         const query = employeeIdSearch.trim();
@@ -181,7 +498,7 @@ const DashboardPage = () => {
         const nextMonthStart = new Date(now.getFullYear(), now.getMonth() + 1, 1);
         const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
 
-        const matchedBills = sourceBills.filter((bill) => {
+        const matchedBills = queueAwareSourceBills.filter((bill) => {
             const billId = getBillIdentifier(bill);
             if (!showDeleted && billId && deletedIds.has(billId)) return false;
 
@@ -220,7 +537,7 @@ const DashboardPage = () => {
             const bTime = new Date(b?.upload_date || b?.created_at || b?.updated_at || 0).getTime();
             return bTime - aTime;
         });
-    }, [sourceBills, employeeIdSearch, statusFilter, hospitalFilter, dateFilter, showDeleted, deletedIds]);
+    }, [queueAwareSourceBills, employeeIdSearch, statusFilter, hospitalFilter, dateFilter, showDeleted, deletedIds]);
 
     return (
         <Container maxWidth="xl" sx={{ py: 4 }}>
