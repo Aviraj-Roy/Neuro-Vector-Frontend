@@ -61,6 +61,7 @@ const getProcessingTimeText = (bill) => {
 
 const getBillIdentifier = (bill) => bill?.upload_id || bill?.bill_id || bill?.temp_id || null;
 const getViewIdentifier = (bill) => bill?.bill_id || bill?.upload_id || null;
+const isDetailsReady = (bill) => bill?.details_ready === true;
 
 const BillsTable = ({
     bills,
@@ -116,6 +117,7 @@ const BillsTable = ({
                     {bills.map((bill) => {
                         const billId = getBillIdentifier(bill);
                         const viewId = getViewIdentifier(bill);
+                        const canViewDetails = bill.status === STAGES.COMPLETED && isDetailsReady(bill);
                         const rowKey = billId || `${bill.employee_id}-${bill.original_filename}-${bill.upload_date || ''}`;
                         return (
                         <TableRow
@@ -170,7 +172,7 @@ const BillsTable = ({
                             </TableCell>
                             <TableCell align="center">
                                 <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 1 }}>
-                                    {bill.status === STAGES.COMPLETED ? (
+                                    {canViewDetails ? (
                                         <Button
                                             variant="contained"
                                             size="small"

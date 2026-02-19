@@ -11,7 +11,7 @@ import {
     Typography,
 } from '@mui/material';
 import { ArrowBack } from '@mui/icons-material';
-import { getBillData, verifyBill } from '../services/api';
+import { getBillData } from '../services/api';
 import { STAGES } from '../constants/stages';
 import { parseVerificationResult } from '../utils/verificationResultParser';
 import { applyBillEdits, saveBillEdits } from '../utils/billEditsStorage';
@@ -93,23 +93,16 @@ const ResultPage = () => {
             setBillData(null);
             setParsedResult(null);
             const requestedId = targetUploadId.trim();
-            let data = await getBillData(requestedId);
-
-            let rawVerificationText = typeof data.verification_result === 'string'
+            const data = await getBillData(requestedId);
+            const rawVerificationText = typeof data.verification_result === 'string'
                 ? data.verification_result
                 : '';
-
-            if (data.status === STAGES.COMPLETED && !rawVerificationText.trim()) {
-                setLoadingMessage('Generating verification result...');
-                await verifyBill(data.upload_id || requestedId, data.hospital_name || null);
-                data = await getBillData(requestedId);
-                rawVerificationText = typeof data.verification_result === 'string'
-                    ? data.verification_result
-                    : '';
-            }
+            const detailsReady = data?.details_ready === true;
 
             setBillData(data);
-            parseAndSetResult(rawVerificationText, data.financial_totals);
+            if (data.status === STAGES.COMPLETED && detailsReady && rawVerificationText.trim()) {
+                parseAndSetResult(rawVerificationText, data.financial_totals);
+            }
         } catch (err) {
             setError(
                 err.response?.data?.message
@@ -154,7 +147,7 @@ const ResultPage = () => {
             .filter((category) => category.items.length > 0);
     }, [parsedResult, searchText, selectedDecisions]);
 
-    const hasData = Boolean(parsedResult && billData);
+    const hasData = Boolean(parsedResult && billData?.status === STAGES.COMPLETED && billData?.details_ready === true);
     const handleEnterEditMode = () => setIsEditMode(true);
     const handleSaveEdits = () => {
         if (!urlUploadId || !parsedResult) return;
@@ -209,7 +202,7 @@ const ResultPage = () => {
                 </Paper>
             )}
 
-            {billData && billData.status !== STAGES.COMPLETED && !loading && (
+            {billData && (billData.status !== STAGES.COMPLETED || billData?.details_ready !== true) && !loading && (
                 <Alert severity="info" sx={{ mb: 3 }}>
                     Bill is currently in <strong>{billData.status}</strong> state. Structured verification table is shown
                     only after completion.

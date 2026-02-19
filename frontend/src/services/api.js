@@ -29,6 +29,19 @@ apiClient.interceptors.response.use(
 );
 
 const normalizeStatus = (value) => String(value || 'uploaded').toUpperCase();
+const parseBooleanLike = (value) => {
+    if (typeof value === 'boolean') return value;
+    if (typeof value === 'number') {
+        if (value === 1) return true;
+        if (value === 0) return false;
+    }
+    if (typeof value === 'string') {
+        const normalized = value.trim().toLowerCase();
+        if (['true', '1', 'yes', 'y'].includes(normalized)) return true;
+        if (['false', '0', 'no', 'n', ''].includes(normalized)) return false;
+    }
+    return null;
+};
 const hasNonEmptyValue = (value) => {
     if (value === null || value === undefined) return false;
     if (typeof value === 'string') return value.trim().length > 0;
@@ -62,6 +75,7 @@ const normalizeStatusResponse = (data, uploadId) => ({
     page_count: Number(data?.page_count || 0),
     original_filename: data?.original_filename || 'Unknown',
     file_size_bytes: Number(data?.file_size_bytes || 0),
+    details_ready: parseBooleanLike(data?.details_ready) ?? false,
 });
 
 export const normalizeBillsResponse = (data) => {
@@ -75,6 +89,7 @@ export const normalizeBillsResponse = (data) => {
         const rawVerification = bill?.verification_result ?? bill?.verificationResult ?? bill?.result;
         const explicitReady = bill?.details_ready ?? bill?.result_ready ?? bill?.is_result_ready ?? bill?.has_verification_result;
         const hasExplicitReady = explicitReady !== null && explicitReady !== undefined;
+        const parsedExplicitReady = parseBooleanLike(explicitReady);
         const hasRawVerification = rawVerification !== null && rawVerification !== undefined;
         return ({
         bill_id: bill?.bill_id || bill?.upload_id || '',
@@ -91,7 +106,7 @@ export const normalizeBillsResponse = (data) => {
         hospital_name: bill?.hospital_name || '',
         status: normalizeStatus(bill?.status),
         details_ready: hasExplicitReady
-            ? Boolean(explicitReady)
+            ? (parsedExplicitReady ?? hasNonEmptyValue(explicitReady))
             : (hasRawVerification ? hasNonEmptyValue(rawVerification) : null),
         verification_result: rawVerification ?? null,
         grand_total: bill?.grand_total ?? null,
@@ -131,6 +146,9 @@ const normalizeBillDataResponse = (data, uploadId) => {
         bill_id: data?.billId || data?.bill_id || data?.upload_id || uploadId,
         upload_id: data?.upload_id || data?.billId || uploadId,
         status: normalizeStatus(data?.status),
+        details_ready: parseBooleanLike(
+            data?.details_ready ?? data?.result_ready ?? data?.has_verification_result
+        ) ?? false,
         verification_result: verificationAsText,
         financial_totals: {
             total_billed: Number(data?.financial_totals?.total_billed || 0),

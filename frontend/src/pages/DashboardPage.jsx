@@ -111,6 +111,19 @@ const NON_DELETED_VIEW_STATUSES = new Set([
     STAGES.FAILED,
 ]);
 const getNormalizedStatus = (bill) => String(bill?.status || '').toUpperCase();
+const parseBooleanLike = (value) => {
+    if (typeof value === 'boolean') return value;
+    if (typeof value === 'number') {
+        if (value === 1) return true;
+        if (value === 0) return false;
+    }
+    if (typeof value === 'string') {
+        const normalized = value.trim().toLowerCase();
+        if (['true', '1', 'yes', 'y'].includes(normalized)) return true;
+        if (['false', '0', 'no', 'n', ''].includes(normalized)) return false;
+    }
+    return null;
+};
 const hasNonEmptyValue = (value) => {
     if (value === null || value === undefined) return false;
     if (typeof value === 'string') return value.trim().length > 0;
@@ -120,11 +133,12 @@ const hasNonEmptyValue = (value) => {
 };
 const isBillDetailsReady = (bill) => {
     const explicit = bill?.details_ready ?? bill?.detailsReady ?? bill?.result_ready ?? bill?.resultReady;
-    if (typeof explicit === 'boolean') return explicit;
-    if (explicit !== null && explicit !== undefined) return Boolean(explicit);
+    const parsedExplicit = parseBooleanLike(explicit);
+    if (parsedExplicit !== null) return parsedExplicit;
+    if (explicit !== null && explicit !== undefined) return hasNonEmptyValue(explicit);
     const rawVerification = bill?.verification_result ?? bill?.verificationResult ?? bill?.result;
     if (rawVerification === null || rawVerification === undefined) {
-        return true;
+        return false;
     }
     return hasNonEmptyValue(rawVerification);
 };
