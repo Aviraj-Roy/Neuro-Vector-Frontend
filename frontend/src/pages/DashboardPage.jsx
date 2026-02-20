@@ -222,6 +222,7 @@ const DashboardPage = () => {
     const [pendingUploads, setPendingUploads] = React.useState(() => loadPendingUploads());
     const [deletedBills, setDeletedBills] = React.useState(() => loadDeletedBills());
     const [restoringUploadId, setRestoringUploadId] = React.useState(null);
+    const [selectedDeletedBillIds, setSelectedDeletedBillIds] = React.useState([]);
     const queueStartTimesRef = React.useRef(new Map());
     const autoDeleteInFlightRef = React.useRef(false);
     const showDeleted = billScope === 'DELETED';
@@ -230,14 +231,17 @@ const DashboardPage = () => {
         navigate('/upload');
     };
 
-    const handleDeleteBill = async (billOrId) => {
+    const performDeleteBill = async (billOrId, options = {}) => {
+        const { skipConfirm = false } = options;
         const { clickedBill, clickedId } = resolveDeleteRequest(billOrId);
-        if (!clickedId) return;
+        if (!clickedId) return false;
 
-        const confirmed = showDeleted
-            ? window.confirm(`Permanently delete bill ${clickedId}? This action cannot be undone.`)
-            : window.confirm(`Temporarily delete bill ${clickedId}? You can restore it from Deleted Bills.`);
-        if (!confirmed) return;
+        if (!skipConfirm) {
+            const confirmed = showDeleted
+                ? window.confirm(`Permanently delete bill ${clickedId}? This action cannot be undone.`)
+                : window.confirm(`Temporarily delete bill ${clickedId}? You can restore it from Deleted Bills.`);
+            if (!confirmed) return false;
+        }
 
         try {
             setDeleteError(null);
@@ -265,11 +269,11 @@ const DashboardPage = () => {
 
             if (!billToDelete && showDeleted) {
                 removeBillFromDeleted();
-                return;
+                return true;
             }
 
             if (!billToDelete && !showDeleted) {
-                return;
+                return false;
             }
 
             if (showDeleted) {
@@ -281,7 +285,7 @@ const DashboardPage = () => {
                         const itemKeys = getIdentifierKeys(item);
                         return !Array.from(itemKeys).some((key) => getIdentifierKeys(billToDelete, clickedId).has(key));
                     }));
-                    return;
+                    return true;
                 }
 
                 let deleted = false;
@@ -320,7 +324,7 @@ const DashboardPage = () => {
                 if (deleted || allNotFound) {
                     removeBillFromDeleted();
                     await refetch();
-                    return;
+                    return true;
                 }
                 if (!deleted) {
                     setDeleteError(
@@ -329,7 +333,7 @@ const DashboardPage = () => {
                         || lastError?.message
                         || 'Failed to permanently delete bill.'
                     );
-                    return;
+                    return false;
                 }
             } else {
                 setDeletedBills((prev) => {
@@ -340,6 +344,7 @@ const DashboardPage = () => {
                     saveDeletedBills(next);
                     return next;
                 });
+                return true;
             }
         } catch (err) {
             setDeleteError(
@@ -348,10 +353,13 @@ const DashboardPage = () => {
                 || err.message
                 || 'Failed to delete bill.'
             );
+            return false;
         } finally {
             setDeletingUploadId(null);
         }
     };
+
+    const handleDeleteBill = async (billOrId) => performDeleteBill(billOrId, { skipConfirm: false });
 
     const handleRestoreBill = (uploadId) => {
         if (!uploadId) return;
@@ -553,6 +561,57 @@ const DashboardPage = () => {
         });
     }, [queueAwareSourceBills, employeeIdSearch, statusFilter, hospitalFilter, dateFilter, showDeleted, deletedIds]);
 
+    const handleToggleDeletedBillSelect = (bill, checked) => {
+        const billId = getBillIdentifier(bill);
+        if (!billId) return;
+        setSelectedDeletedBillIds((prev) => {
+            if (checked) return [...new Set([...prev, billId])];
+            return prev.filter((id) => id !== billId);
+        });
+    };
+
+    const handleToggleSelectAllDeletedBills = (checked) => {
+        if (!showDeleted) return;
+        if (!checked) {
+            setSelectedDeletedBillIds([]);
+            return;
+        }
+        const visibleIds = filteredBills.map((bill) => getBillIdentifier(bill)).filter(Boolean);
+        setSelectedDeletedBillIds([...new Set(visibleIds)]);
+    };
+
+    const handleDeleteSelectedBills = async () => {
+        if (!showDeleted) return;
+        const visibleBills = filteredBills || [];
+        const selectedSet = new Set(selectedDeletedBillIds);
+        const targetBills = visibleBills.filter((bill) => selectedSet.has(getBillIdentifier(bill)));
+        if (targetBills.length === 0) return;
+
+        const confirmed = window.confirm(
+            `Permanently delete ${targetBills.length} selected deleted bills? This action cannot be undone.`
+        );
+        if (!confirmed) return;
+
+        let failed = 0;
+        for (const bill of targetBills) {
+            const success = await performDeleteBill(bill, { skipConfirm: true });
+            if (!success) failed += 1;
+        }
+
+        if (failed > 0) {
+            setDeleteError(`Failed to permanently delete ${failed} bill(s).`);
+        }
+    };
+
+    React.useEffect(() => {
+        if (!showDeleted) {
+            setSelectedDeletedBillIds([]);
+            return;
+        }
+        const visibleIds = new Set(filteredBills.map((bill) => getBillIdentifier(bill)).filter(Boolean));
+        setSelectedDeletedBillIds((prev) => prev.filter((id) => visibleIds.has(id)));
+    }, [showDeleted, filteredBills]);
+
     return (
         <Container maxWidth="xl" sx={{ py: 4 }}>
             {/* Header */}
@@ -674,6 +733,24 @@ const DashboardPage = () => {
                 </TextField>
             </Box>
 
+            {showDeleted && (
+                <Box sx={{ mb: 3, display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
+                    <Button
+                        variant="contained"
+                        color="error"
+                        onClick={handleDeleteSelectedBills}
+                        disabled={
+                            deletingUploadId !== null
+                            || selectedDeletedBillIds.length === 0
+                            || filteredBills.length === 0
+                        }
+                        sx={{ textTransform: 'none', fontWeight: 600 }}
+                    >
+                        Delete Bills
+                    </Button>
+                </Box>
+            )}
+
             {/* Bills Table */}
             <BillsTable
                 bills={filteredBills}
@@ -683,6 +760,9 @@ const DashboardPage = () => {
                 deletedView={showDeleted}
                 onRestoreBill={showDeleted ? handleRestoreBill : null}
                 restoringUploadId={restoringUploadId}
+                selectedDeletedBillIds={selectedDeletedBillIds}
+                onToggleDeletedBillSelect={showDeleted ? handleToggleDeletedBillSelect : null}
+                onToggleSelectAllDeletedBills={showDeleted ? handleToggleSelectAllDeletedBills : null}
             />
 
             {/* Polling Indicator */}

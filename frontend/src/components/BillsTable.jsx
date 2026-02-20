@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
     Box,
     Button,
+    Checkbox,
     CircularProgress,
     IconButton,
     Paper,
@@ -60,8 +61,20 @@ const getProcessingTimeText = (bill) => {
 };
 
 const getBillIdentifier = (bill) => bill?.upload_id || bill?.bill_id || bill?.temp_id || null;
+const getDisplayBillId = (bill) => bill?.bill_id || bill?.upload_id || bill?.temp_id || null;
 const getViewIdentifier = (bill) => bill?.bill_id || bill?.upload_id || null;
 const isDetailsReady = (bill) => bill?.details_ready === true;
+const formatBillIdForDisplay = (value) => {
+    const id = String(value || '').trim();
+    if (!id) return 'N/A';
+    if (id.length <= 16) return id;
+    return `${id.slice(0, 8)}...${id.slice(-4)}`;
+};
+const formatGrandTotal = (value) => {
+    const amount = Number(value);
+    if (!Number.isFinite(amount)) return 'N/A';
+    return `Rs. ${amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+};
 
 const BillsTable = ({
     bills,
@@ -71,8 +84,19 @@ const BillsTable = ({
     deletedView = false,
     onRestoreBill = null,
     restoringUploadId = null,
+    selectedDeletedBillIds = [],
+    onToggleDeletedBillSelect = null,
+    onToggleSelectAllDeletedBills = null,
 }) => {
     const navigate = useNavigate();
+    const selectedSet = React.useMemo(() => new Set(selectedDeletedBillIds || []), [selectedDeletedBillIds]);
+    const selectableIds = React.useMemo(
+        () => (bills || []).map((bill) => getBillIdentifier(bill)).filter(Boolean),
+        [bills]
+    );
+    const selectedCount = selectableIds.filter((id) => selectedSet.has(id)).length;
+    const allSelected = selectableIds.length > 0 && selectedCount === selectableIds.length;
+    const partiallySelected = selectedCount > 0 && !allSelected;
 
     const handleViewResult = (uploadId) => {
         navigate(`/bill/${uploadId}`);
@@ -101,14 +125,25 @@ const BillsTable = ({
 
     return (
         <TableContainer component={Paper} elevation={3}>
-            <Table sx={{ minWidth: 1050 }}>
+            <Table sx={{ minWidth: 1120 }}>
                 <TableHead>
                     <TableRow sx={{ backgroundColor: 'grey.100' }}>
+                        {deletedView && (
+                            <TableCell padding="checkbox">
+                                <Checkbox
+                                    size="small"
+                                    checked={allSelected}
+                                    indeterminate={partiallySelected}
+                                    onChange={(event) => onToggleSelectAllDeletedBills?.(event.target.checked)}
+                                />
+                            </TableCell>
+                        )}
                         <TableCell sx={{ fontWeight: 700, fontSize: '0.875rem' }}>Employee ID</TableCell>
+                        <TableCell sx={{ fontWeight: 700, fontSize: '0.875rem' }}>Bill id</TableCell>
                         <TableCell sx={{ fontWeight: 700, fontSize: '0.875rem' }}>Hospital Name</TableCell>
                         <TableCell sx={{ fontWeight: 700, fontSize: '0.875rem' }}>Invoice Date</TableCell>
                         <TableCell sx={{ fontWeight: 700, fontSize: '0.875rem' }}>Upload Date</TableCell>
-                        <TableCell sx={{ fontWeight: 700, fontSize: '0.875rem' }}>Processing Time</TableCell>
+                        <TableCell sx={{ fontWeight: 700, fontSize: '0.875rem' }}>Grand Total</TableCell>
                         <TableCell sx={{ fontWeight: 700, fontSize: '0.875rem' }}>Status</TableCell>
                         <TableCell align="center" sx={{ fontWeight: 700, fontSize: '0.875rem' }}>Action</TableCell>
                     </TableRow>
@@ -116,6 +151,7 @@ const BillsTable = ({
                 <TableBody>
                     {bills.map((bill) => {
                         const billId = getBillIdentifier(bill);
+                        const displayBillId = getDisplayBillId(bill);
                         const viewId = getViewIdentifier(bill);
                         const canViewDetails = bill.status === STAGES.COMPLETED && isDetailsReady(bill);
                         const rowKey = billId || `${bill.employee_id}-${bill.original_filename}-${bill.upload_date || ''}`;
@@ -129,6 +165,16 @@ const BillsTable = ({
                                 transition: 'background-color 0.2s',
                             }}
                         >
+                            {deletedView && (
+                                <TableCell padding="checkbox">
+                                    <Checkbox
+                                        size="small"
+                                        checked={selectedSet.has(billId)}
+                                        onChange={(event) => onToggleDeletedBillSelect?.(bill, event.target.checked)}
+                                        disabled={!billId}
+                                    />
+                                </TableCell>
+                            )}
                             <TableCell>
                                 <Typography
                                     variant="body2"
@@ -141,6 +187,19 @@ const BillsTable = ({
                                     title={bill.employee_id}
                                 >
                                     {bill.employee_id || 'N/A'}
+                                </Typography>
+                            </TableCell>
+                            <TableCell>
+                                <Typography
+                                    variant="body2"
+                                    sx={{
+                                        fontFamily: 'monospace',
+                                        fontSize: '0.875rem',
+                                        color: 'text.primary',
+                                    }}
+                                    title={displayBillId || 'N/A'}
+                                >
+                                    {formatBillIdForDisplay(displayBillId)}
                                 </Typography>
                             </TableCell>
                             <TableCell>
@@ -164,7 +223,7 @@ const BillsTable = ({
                             </TableCell>
                             <TableCell>
                                 <Typography variant="body2" sx={{ fontSize: '0.875rem' }}>
-                                    {getProcessingTimeText(bill)}
+                                    {formatGrandTotal(bill.grand_total)}
                                 </Typography>
                             </TableCell>
                             <TableCell>

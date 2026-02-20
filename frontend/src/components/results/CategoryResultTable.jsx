@@ -18,10 +18,21 @@ import {
 import { ExpandMore } from '@mui/icons-material';
 import { DECISIONS } from '../../utils/verificationResultParser';
 
+const SHOW_DECISION_COLUMN = false;
+const SHOW_EXTRA_COLUMN = false;
+
 const WRAP_CELL_SX = {
     whiteSpace: 'normal',
     wordBreak: 'break-word',
     lineHeight: 1.3,
+};
+const EDIT_SECTION_DIVIDER_SX = {
+    borderLeft: '2px solid',
+    borderLeftColor: 'divider',
+    pl: 2,
+};
+const PRE_EDIT_GAP_SX = {
+    pr: 2,
 };
 
 const formatCurrency = (value) => {
@@ -43,6 +54,18 @@ const toFiniteNumber = (value) => {
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : null;
 };
+const areNumbersEqual = (a, b) => {
+    if (a === null && b === null) return true;
+    if (a === null || b === null) return false;
+    return Math.abs(a - b) < 1e-9;
+};
+const hasQtyRateOverride = (item) => {
+    const currentQty = toFiniteNumber(item?.qty);
+    const currentRate = toFiniteNumber(item?.rate);
+    const originalQty = toFiniteNumber(item?.originalQty ?? item?.qty);
+    const originalRate = toFiniteNumber(item?.originalRate ?? item?.rate);
+    return !areNumbersEqual(currentQty, originalQty) || !areNumbersEqual(currentRate, originalRate);
+};
 
 const getTieupRateValue = (item) => {
     const tieup = toFiniteNumber(item?.tieupRate);
@@ -53,21 +76,32 @@ const getTieupRateValue = (item) => {
 const getCalculatedBilledAmount = (item, isEditMode) => {
     const qty = toFiniteNumber(item?.qty);
     const rate = toFiniteNumber(item?.rate);
-    if (isEditMode && qty !== null && rate !== null) {
+    const shouldUseComputedBilled = hasQtyRateOverride(item);
+    if (shouldUseComputedBilled && qty !== null && rate !== null) {
         return qty * rate;
     }
-    return toFiniteNumber(item?.billedAmount);
+    return toFiniteNumber(item?.originalBilledAmount ?? item?.billedAmount);
 };
 
-const getCalculatedAmountToBePaid = (item, isEditMode) => {
+const getCalculatedAmountToBePaid = (item) => {
     const qty = toFiniteNumber(item?.qty);
     const tieupRate = getTieupRateValue(item);
-    if (isEditMode && qty !== null && tieupRate !== null) {
+    if (qty !== null && tieupRate !== null) {
         return qty * tieupRate;
     }
     if (item?.amountToBePaid !== null && item?.amountToBePaid !== undefined) return item.amountToBePaid;
     if (item?.allowedAmount !== null && item?.allowedAmount !== undefined) return item.allowedAmount;
     return null;
+};
+const formatDiscrepancyFlag = (value) => {
+    if (value === true) return 'True';
+    if (value === false) return 'False';
+    return 'N/A';
+};
+const getDiscrepancyTextColor = (value) => {
+    if (value === true) return 'error.main';
+    if (value === false) return 'success.main';
+    return 'text.secondary';
 };
 
 const toNullableNumber = (value) => {
@@ -84,6 +118,34 @@ const decisionChipProps = (decision) => {
 };
 
 const CategoryResultTable = ({ category, onUpdateItem, isEditMode = false }) => {
+    const viewRowRefs = React.useRef([]);
+    const editRowRefs = React.useRef([]);
+    const viewTotalRowRef = React.useRef(null);
+    const editTotalRowRef = React.useRef(null);
+
+    const syncRowHeights = React.useCallback(() => {
+        const rowCount = Math.max(viewRowRefs.current.length, editRowRefs.current.length);
+        for (let i = 0; i < rowCount; i += 1) {
+            const viewRow = viewRowRefs.current[i];
+            const editRow = editRowRefs.current[i];
+            if (!viewRow || !editRow) continue;
+
+            viewRow.style.height = 'auto';
+            editRow.style.height = 'auto';
+            const targetHeight = Math.max(viewRow.offsetHeight, editRow.offsetHeight);
+            viewRow.style.height = `${targetHeight}px`;
+            editRow.style.height = `${targetHeight}px`;
+        }
+
+        if (viewTotalRowRef.current && editTotalRowRef.current) {
+            viewTotalRowRef.current.style.height = 'auto';
+            editTotalRowRef.current.style.height = 'auto';
+            const totalHeight = Math.max(viewTotalRowRef.current.offsetHeight, editTotalRowRef.current.offsetHeight);
+            viewTotalRowRef.current.style.height = `${totalHeight}px`;
+            editTotalRowRef.current.style.height = `${totalHeight}px`;
+        }
+    }, []);
+
     const handleFieldChange = (itemIndex, field) => (event) => {
         if (!onUpdateItem) return;
         onUpdateItem(category.name, itemIndex, {
@@ -92,12 +154,22 @@ const CategoryResultTable = ({ category, onUpdateItem, isEditMode = false }) => 
     };
     const totals = (category.items || []).reduce((acc, item) => {
         const billed = getCalculatedBilledAmount(item, isEditMode);
-        const payable = getCalculatedAmountToBePaid(item, isEditMode);
+        const payable = getCalculatedAmountToBePaid(item);
         return {
             billedAmount: acc.billedAmount + (toFiniteNumber(billed) ?? 0),
             amountToBePaid: acc.amountToBePaid + (toFiniteNumber(payable) ?? 0),
         };
     }, { billedAmount: 0, amountToBePaid: 0 });
+
+    React.useLayoutEffect(() => {
+        const rafId = window.requestAnimationFrame(syncRowHeights);
+        const handleResize = () => syncRowHeights();
+        window.addEventListener('resize', handleResize);
+        return () => {
+            window.cancelAnimationFrame(rafId);
+            window.removeEventListener('resize', handleResize);
+        };
+    }, [syncRowHeights, category.items]);
 
     return (
         <Accordion defaultExpanded disableGutters>
@@ -110,90 +182,143 @@ const CategoryResultTable = ({ category, onUpdateItem, isEditMode = false }) => 
                 </Box>
             </AccordionSummary>
             <AccordionDetails>
-                <TableContainer component={Paper} variant="outlined" sx={{ width: '100%', overflowX: 'hidden' }}>
-                    <Table
-                        size="small"
-                        stickyHeader
-                        sx={{ width: '100%', tableLayout: 'fixed', '& th, & td': { px: 1, py: 0.75 } }}
+                <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-start', flexWrap: { xs: 'wrap', xl: 'nowrap' } }}>
+                    <TableContainer
+                        component={Paper}
+                        variant="outlined"
+                        sx={{ flex: '1 1 72%', minWidth: 760, overflowX: 'hidden' }}
                     >
-                        <TableHead>
-                            <TableRow>
-                                <TableCell sx={{ width: '21%' }}>Item Name</TableCell>
-                                <TableCell sx={{ width: '21%' }}>Best Match</TableCell>
-                                <TableCell sx={{ width: '8%' }}>Tieup Rate</TableCell>
-                                <TableCell sx={{ width: '5%' }}>Qty</TableCell>
-                                <TableCell sx={{ width: '8%' }}>Rate</TableCell>
-                                <TableCell sx={{ width: '10%' }}>Billed Amount</TableCell>
-                                <TableCell sx={{ width: '11%' }}>Amount to be Paid</TableCell>
-                                <TableCell sx={{ width: '7%' }}>Extra</TableCell>
-                                <TableCell sx={{ width: '9%' }}>Decision</TableCell>
-                            </TableRow>
-                        </TableHead>
-                        <TableBody>
-                            {category.items.map((item, index) => {
-                                const chip = decisionChipProps(item.decision);
-                                return (
-                                    <TableRow key={`${category.name}-${item.billItem}-${index}`} hover>
-                                        <TableCell sx={WRAP_CELL_SX}>{item.billItem || 'N/A'}</TableCell>
-                                        <TableCell sx={WRAP_CELL_SX}>{item.bestMatch || 'N/A'}</TableCell>
-                                        <TableCell>
-                                            {formatCurrency(item.tieupRate ?? item.allowedAmount)}
-                                        </TableCell>
-                                        <TableCell>
-                                            {isEditMode ? (
-                                                <TextField
-                                                    size="small"
-                                                    type="number"
-                                                    fullWidth
-                                                    value={item.qty ?? ''}
-                                                    onChange={handleFieldChange(index, 'qty')}
-                                                />
-                                            ) : (
-                                                formatQuantity(item.qty)
+                        <Table
+                            size="small"
+                            stickyHeader
+                            sx={{ width: '100%', tableLayout: 'fixed', '& th, & td': { px: 1, py: 0.75 } }}
+                        >
+                            <TableHead>
+                                <TableRow>
+                                    <TableCell sx={{ width: '26%' }}>Item Name</TableCell>
+                                    <TableCell sx={{ width: '26%' }}>Best Match</TableCell>
+                                    <TableCell sx={{ width: '10%' }}>Tieup Rate</TableCell>
+                                    <TableCell sx={{ width: '12%' }}>Billed Amount</TableCell>
+                                    <TableCell sx={{ width: '8%' }}>Qty</TableCell>
+                                    <TableCell sx={{ width: '9%', ...PRE_EDIT_GAP_SX }}>Rate</TableCell>
+                                    <TableCell sx={{ width: '9%' }}>Discrepancy</TableCell>
+                                    {SHOW_EXTRA_COLUMN && <TableCell sx={{ width: '8%' }}>Extra</TableCell>}
+                                    {SHOW_DECISION_COLUMN && <TableCell sx={{ width: '10%' }}>Decision</TableCell>}
+                                </TableRow>
+                            </TableHead>
+                            <TableBody>
+                                {category.items.map((item, index) => {
+                                    const chip = decisionChipProps(item.decision);
+                                    return (
+                                        <TableRow
+                                            key={`view-${category.name}-${item.billItem}-${index}`}
+                                            hover
+                                            ref={(el) => {
+                                                viewRowRefs.current[index] = el;
+                                            }}
+                                        >
+                                            <TableCell sx={WRAP_CELL_SX}>{item.billItem || 'N/A'}</TableCell>
+                                            <TableCell sx={WRAP_CELL_SX}>{item.bestMatch || 'N/A'}</TableCell>
+                                            <TableCell>{formatCurrency(item.tieupRate ?? item.allowedAmount)}</TableCell>
+                                            <TableCell>{formatCurrencyOrNA(getCalculatedBilledAmount(item, isEditMode))}</TableCell>
+                                            <TableCell>{formatQuantity(item.originalQty ?? item.qty)}</TableCell>
+                                            <TableCell sx={PRE_EDIT_GAP_SX}>{formatCurrencyOrNA(item.originalRate ?? item.rate)}</TableCell>
+                                            <TableCell>
+                                                <Typography
+                                                    variant="body2"
+                                                    sx={{ color: getDiscrepancyTextColor(item.discrepancy), fontWeight: 600 }}
+                                                >
+                                                    {formatDiscrepancyFlag(item.discrepancy)}
+                                                </Typography>
+                                            </TableCell>
+                                            {SHOW_EXTRA_COLUMN && <TableCell>{formatCurrency(item.extraAmount)}</TableCell>}
+                                            {SHOW_DECISION_COLUMN && (
+                                                <TableCell>
+                                                    <Chip size="small" color={chip.color} label={chip.label} />
+                                                </TableCell>
                                             )}
+                                        </TableRow>
+                                    );
+                                })}
+                                <TableRow
+                                    sx={{ backgroundColor: 'grey.100' }}
+                                    ref={viewTotalRowRef}
+                                >
+                                    <TableCell colSpan={3} sx={{ fontWeight: 700 }}>
+                                        Category Total
+                                    </TableCell>
+                                    <TableCell sx={{ fontWeight: 700 }}>{formatCurrency(totals.billedAmount)}</TableCell>
+                                    <TableCell />
+                                    <TableCell sx={PRE_EDIT_GAP_SX} />
+                                    <TableCell />
+                                    {SHOW_EXTRA_COLUMN && <TableCell />}
+                                    {SHOW_DECISION_COLUMN && <TableCell />}
+                                </TableRow>
+                            </TableBody>
+                        </Table>
+                    </TableContainer>
+
+                    <TableContainer
+                        component={Paper}
+                        variant="outlined"
+                        sx={{ flex: '1 1 28%', minWidth: 360, overflowX: 'hidden' }}
+                    >
+                        <Table
+                            size="small"
+                            stickyHeader
+                            sx={{ width: '100%', tableLayout: 'fixed', '& th, & td': { px: 1, py: 0.75 } }}
+                        >
+                            <TableHead>
+                                <TableRow>
+                                    <TableCell sx={{ width: '30%', ...EDIT_SECTION_DIVIDER_SX }}>Edit Qty</TableCell>
+                                    <TableCell sx={{ width: '33%' }}>Edit Tieup Rate</TableCell>
+                                    <TableCell sx={{ width: '37%' }}>Amount to be Paid</TableCell>
+                                </TableRow>
+                            </TableHead>
+                            <TableBody>
+                                {category.items.map((item, index) => (
+                                    <TableRow
+                                        key={`edit-${category.name}-${item.billItem}-${index}`}
+                                        hover
+                                        ref={(el) => {
+                                            editRowRefs.current[index] = el;
+                                        }}
+                                    >
+                                        <TableCell sx={EDIT_SECTION_DIVIDER_SX}>
+                                            <TextField
+                                                size="small"
+                                                type="number"
+                                                fullWidth
+                                                value={item.qty ?? ''}
+                                                onChange={handleFieldChange(index, 'qty')}
+                                            />
                                         </TableCell>
                                         <TableCell>
-                                            {isEditMode ? (
-                                                <TextField
-                                                    size="small"
-                                                    type="number"
-                                                    fullWidth
-                                                    value={item.rate ?? ''}
-                                                    onChange={handleFieldChange(index, 'rate')}
-                                                />
-                                            ) : (
-                                                formatCurrencyOrNA(item.rate)
-                                            )}
+                                            <TextField
+                                                size="small"
+                                                type="number"
+                                                fullWidth
+                                                value={item.tieupRate ?? ''}
+                                                onChange={handleFieldChange(index, 'tieupRate')}
+                                            />
                                         </TableCell>
-                                        <TableCell>
-                                            {formatCurrencyOrNA(getCalculatedBilledAmount(item, isEditMode))}
-                                        </TableCell>
-                                        <TableCell>
-                                            {formatCurrencyOrNA(getCalculatedAmountToBePaid(item, isEditMode))}
-                                        </TableCell>
-                                        <TableCell>{formatCurrency(item.extraAmount)}</TableCell>
-                                        <TableCell>
-                                            <Chip size="small" color={chip.color} label={chip.label} />
-                                        </TableCell>
+                                        <TableCell>{formatCurrencyOrNA(getCalculatedAmountToBePaid(item))}</TableCell>
                                     </TableRow>
-                                );
-                            })}
-                            <TableRow sx={{ backgroundColor: 'grey.100' }}>
-                                <TableCell colSpan={5} sx={{ fontWeight: 700 }}>
-                                    Category Total
-                                </TableCell>
-                                <TableCell sx={{ fontWeight: 700 }}>
-                                    {formatCurrency(totals.billedAmount)}
-                                </TableCell>
-                                <TableCell sx={{ fontWeight: 700 }}>
-                                    {formatCurrency(totals.amountToBePaid)}
-                                </TableCell>
-                                <TableCell />
-                                <TableCell />
-                            </TableRow>
-                        </TableBody>
-                    </Table>
-                </TableContainer>
+                                ))}
+                                <TableRow
+                                    sx={{ backgroundColor: 'grey.100' }}
+                                    ref={editTotalRowRef}
+                                >
+                                    <TableCell sx={EDIT_SECTION_DIVIDER_SX} />
+                                    <TableCell />
+                                    <TableCell sx={{ fontWeight: 700 }}>
+                                        {formatCurrency(totals.amountToBePaid)}
+                                    </TableCell>
+                                </TableRow>
+                            </TableBody>
+                        </Table>
+                    </TableContainer>
+                </Box>
             </AccordionDetails>
         </Accordion>
     );

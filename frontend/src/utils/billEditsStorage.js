@@ -14,6 +14,18 @@ const toFiniteNumber = (value) => {
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : null;
 };
+const areNumbersEqual = (a, b) => {
+    if (a === null && b === null) return true;
+    if (a === null || b === null) return false;
+    return Math.abs(a - b) < 1e-9;
+};
+const hasQtyRateOverride = (item) => {
+    const currentQty = toFiniteNumber(item?.qty);
+    const currentRate = toFiniteNumber(item?.rate);
+    const originalQty = toFiniteNumber(item?.originalQty ?? item?.qty);
+    const originalRate = toFiniteNumber(item?.originalRate ?? item?.rate);
+    return !areNumbersEqual(currentQty, originalQty) || !areNumbersEqual(currentRate, originalRate);
+};
 
 const getTieupRateValue = (item) => {
     const tieup = toFiniteNumber(item?.tieupRate);
@@ -31,9 +43,13 @@ const withDerivedAmounts = (parsedResult) => {
                 const qty = toFiniteNumber(item?.qty);
                 const rate = toFiniteNumber(item?.rate);
                 const tieupRate = getTieupRateValue(item);
+                const shouldUseComputedBilled = hasQtyRateOverride(item);
+                const baseBilled = toFiniteNumber(item?.originalBilledAmount ?? item?.billedAmount);
                 return {
                     ...item,
-                    billedAmount: qty !== null && rate !== null ? qty * rate : item?.billedAmount ?? null,
+                    billedAmount: shouldUseComputedBilled && qty !== null && rate !== null
+                        ? qty * rate
+                        : baseBilled,
                     amountToBePaid: qty !== null && tieupRate !== null ? qty * tieupRate : item?.amountToBePaid ?? null,
                 };
             }),
@@ -70,10 +86,16 @@ export const applyBillEdits = (uploadId, parsedResult) => {
                 ...category,
                 items: category.items.map((item, index) => ({
                     ...item,
+                    discrepancy: savedItems[index]?.discrepancy ?? item.discrepancy,
+                    tieupRate: savedItems[index]?.tieupRate ?? item.tieupRate,
                     qty: savedItems[index]?.qty ?? item.qty,
                     rate: savedItems[index]?.rate ?? item.rate,
                     billedAmount: savedItems[index]?.billedAmount ?? item.billedAmount,
                     amountToBePaid: savedItems[index]?.amountToBePaid ?? item.amountToBePaid,
+                    originalTieupRate: savedItems[index]?.originalTieupRate ?? item.originalTieupRate ?? item.tieupRate,
+                    originalQty: savedItems[index]?.originalQty ?? item.originalQty ?? item.qty,
+                    originalRate: savedItems[index]?.originalRate ?? item.originalRate ?? item.rate,
+                    originalBilledAmount: savedItems[index]?.originalBilledAmount ?? item.originalBilledAmount ?? item.billedAmount,
                 })),
             };
         }),

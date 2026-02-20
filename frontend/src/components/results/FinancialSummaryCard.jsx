@@ -21,7 +21,7 @@ const FinancialSummaryCard = ({ financial }) => (
             </Typography>
 
             <Grid container spacing={2}>
-                <Grid item xs={12} md={3}>
+                <Grid item xs={12} md={6}>
                     <Box sx={cardCellStyle}>
                         <Typography variant="body2" color="text.secondary">
                             Total Billed
@@ -31,33 +31,13 @@ const FinancialSummaryCard = ({ financial }) => (
                         </Typography>
                     </Box>
                 </Grid>
-                <Grid item xs={12} md={3}>
+                <Grid item xs={12} md={6}>
                     <Box sx={cardCellStyle}>
                         <Typography variant="body2" color="text.secondary">
-                            Total Allowed
+                            Total Amount to be Paid
                         </Typography>
                         <Typography variant="h6" sx={{ fontWeight: 700, color: 'success.main' }}>
-                            {formatCurrency(financial.totalAllowed)}
-                        </Typography>
-                    </Box>
-                </Grid>
-                <Grid item xs={12} md={3}>
-                    <Box sx={cardCellStyle}>
-                        <Typography variant="body2" color="text.secondary">
-                            Total Extra
-                        </Typography>
-                        <Typography variant="h6" sx={{ fontWeight: 700, color: 'error.main' }}>
-                            {formatCurrency(financial.totalExtra)}
-                        </Typography>
-                    </Box>
-                </Grid>
-                <Grid item xs={12} md={3}>
-                    <Box sx={cardCellStyle}>
-                        <Typography variant="body2" color="text.secondary">
-                            Total Unclassified
-                        </Typography>
-                        <Typography variant="h6" sx={{ fontWeight: 700, color: 'warning.main' }}>
-                            {formatCurrency(financial.totalUnclassified)}
+                            {formatCurrency(financial.totalAmountToBePaid ?? financial.totalAllowed)}
                         </Typography>
                     </Box>
                 </Grid>

@@ -135,6 +135,7 @@ export const buildUploadFormData = (file, hospitalName, employeeId, invoiceDate,
 
 const normalizeBillDataResponse = (data, uploadId) => {
     const rawVerification = data?.verificationResult ?? data?.verification_result ?? data?.result ?? '';
+    const verificationRaw = (rawVerification && typeof rawVerification === 'object') ? rawVerification : null;
     const verificationAsText = typeof rawVerification === 'string'
         ? rawVerification
         : rawVerification
@@ -149,7 +150,9 @@ const normalizeBillDataResponse = (data, uploadId) => {
         details_ready: parseBooleanLike(
             data?.details_ready ?? data?.result_ready ?? data?.has_verification_result
         ) ?? false,
+        verification_result_raw: verificationRaw,
         verification_result: verificationAsText,
+        line_items: Array.isArray(data?.line_items) ? data.line_items : [],
         financial_totals: {
             total_billed: Number(data?.financial_totals?.total_billed || 0),
             total_allowed: Number(data?.financial_totals?.total_allowed || 0),
@@ -227,6 +230,15 @@ export const getBillData = async (uploadId) => {
     return normalizeBillDataResponse(response.data, uploadId);
 };
 
+export const patchBillLineItems = async (uploadId, lineItems, editedBy = null) => {
+    const payload = {
+        line_items: Array.isArray(lineItems) ? lineItems : [],
+    };
+    if (editedBy) payload.edited_by = editedBy;
+    const response = await apiClient.patch(`/bill/${uploadId}/line-items`, payload);
+    return response.data;
+};
+
 export const verifyBill = async (uploadId, hospitalName = null) => {
     const formData = new FormData();
     if (hospitalName) {
@@ -257,6 +269,7 @@ export default {
     getAllBills,
     deleteBill,
     getBillData,
+    patchBillLineItems,
     verifyBill,
     getHospitals,
     reloadTieups,

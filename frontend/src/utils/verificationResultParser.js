@@ -15,6 +15,8 @@ const ITEM_KEY_ALIASES = {
     'tieup rate': 'tieupRate',
     'tie-up rate': 'tieupRate',
     'tieup rates': 'tieupRate',
+    'edit tieup rate': 'tieupRate',
+    'edit tieup rates': 'tieupRate',
     'qty': 'qty',
     'quantity': 'qty',
     'rate': 'rate',
@@ -23,6 +25,7 @@ const ITEM_KEY_ALIASES = {
     'amount to be paid': 'amountToBePaid',
     'payable amount': 'amountToBePaid',
     'amount payable': 'amountToBePaid',
+    'discrepancy': 'discrepancy',
     'billed': 'billedAmount',
     'billed amount': 'billedAmount',
     'extra': 'extraAmount',
@@ -86,6 +89,13 @@ const parseSimilarity = (value) => {
     if (num === null) return null;
     return num > 1 ? num / 100 : num;
 };
+const parseBoolean = (value) => {
+    if (typeof value === 'boolean') return value;
+    const text = String(value || '').trim().toLowerCase();
+    if (['true', '1', 'yes', 'y'].includes(text)) return true;
+    if (['false', '0', 'no', 'n'].includes(text)) return false;
+    return null;
+};
 
 const normalizeDecision = (value) => {
     const normalized = String(value || '')
@@ -129,6 +139,7 @@ const addItemToCategory = (categoryMap, categoryName, rawItem) => {
         amountToBePaid: parseAmount(rawItem.amountToBePaid ?? rawItem.allowedAmount),
         billedAmount: parseAmount(rawItem.billedAmount),
         extraAmount: parseAmount(rawItem.extraAmount),
+        discrepancy: parseBoolean(rawItem.discrepancy),
         decision: normalizeDecision(rawItem.decision),
         reason: String(rawItem.reason || '').trim(),
     };
@@ -210,6 +221,7 @@ const buildTableIndexMap = (headerCells) => {
             map.amountToBePaid = idx;
         }
         if (normalized === 'billed' || normalized.includes('billed amount')) map.billedAmount = idx;
+        if (normalized.includes('discrepancy')) map.discrepancy = idx;
         if (normalized === 'extra' || normalized.includes('extra amount')) map.extraAmount = idx;
         if (normalized.includes('decision')) map.decision = idx;
         if (normalized.includes('reason')) map.reason = idx;
@@ -295,6 +307,7 @@ export const parseVerificationResult = (rawText) => {
                 rate: cells[tableIndexMap.rate] || '',
                 amountToBePaid: cells[tableIndexMap.amountToBePaid] || '',
                 billedAmount: cells[tableIndexMap.billedAmount] || '',
+                discrepancy: cells[tableIndexMap.discrepancy] || '',
                 extraAmount: cells[tableIndexMap.extraAmount] || '',
                 decision: cells[tableIndexMap.decision] || '',
                 reason: cells[tableIndexMap.reason] || '',
