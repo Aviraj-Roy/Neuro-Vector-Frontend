@@ -54,18 +54,6 @@ const toFiniteNumber = (value) => {
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : null;
 };
-const areNumbersEqual = (a, b) => {
-    if (a === null && b === null) return true;
-    if (a === null || b === null) return false;
-    return Math.abs(a - b) < 1e-9;
-};
-const hasQtyRateOverride = (item) => {
-    const currentQty = toFiniteNumber(item?.qty);
-    const currentRate = toFiniteNumber(item?.rate);
-    const originalQty = toFiniteNumber(item?.originalQty ?? item?.qty);
-    const originalRate = toFiniteNumber(item?.originalRate ?? item?.rate);
-    return !areNumbersEqual(currentQty, originalQty) || !areNumbersEqual(currentRate, originalRate);
-};
 
 const getTieupRateValue = (item) => {
     const tieup = toFiniteNumber(item?.tieupRate);
@@ -73,13 +61,7 @@ const getTieupRateValue = (item) => {
     return toFiniteNumber(item?.allowedAmount);
 };
 
-const getCalculatedBilledAmount = (item, isEditMode) => {
-    const qty = toFiniteNumber(item?.qty);
-    const rate = toFiniteNumber(item?.rate);
-    const shouldUseComputedBilled = hasQtyRateOverride(item);
-    if (shouldUseComputedBilled && qty !== null && rate !== null) {
-        return qty * rate;
-    }
+const getCalculatedBilledAmount = (item) => {
     return toFiniteNumber(item?.originalBilledAmount ?? item?.billedAmount);
 };
 
@@ -117,7 +99,7 @@ const decisionChipProps = (decision) => {
     return { color: 'warning', label: 'NEEDS_REVIEW' };
 };
 
-const CategoryResultTable = ({ category, onUpdateItem, isEditMode = false }) => {
+const CategoryResultTable = ({ category, onUpdateItem }) => {
     const viewRowRefs = React.useRef([]);
     const editRowRefs = React.useRef([]);
     const viewTotalRowRef = React.useRef(null);
@@ -153,7 +135,7 @@ const CategoryResultTable = ({ category, onUpdateItem, isEditMode = false }) => 
         });
     };
     const totals = (category.items || []).reduce((acc, item) => {
-        const billed = getCalculatedBilledAmount(item, isEditMode);
+        const billed = getCalculatedBilledAmount(item);
         const payable = getCalculatedAmountToBePaid(item);
         return {
             billedAmount: acc.billedAmount + (toFiniteNumber(billed) ?? 0),
@@ -220,7 +202,7 @@ const CategoryResultTable = ({ category, onUpdateItem, isEditMode = false }) => 
                                             <TableCell sx={WRAP_CELL_SX}>{item.billItem || 'N/A'}</TableCell>
                                             <TableCell sx={WRAP_CELL_SX}>{item.bestMatch || 'N/A'}</TableCell>
                                             <TableCell>{formatCurrency(item.tieupRate ?? item.allowedAmount)}</TableCell>
-                                            <TableCell>{formatCurrencyOrNA(getCalculatedBilledAmount(item, isEditMode))}</TableCell>
+                                            <TableCell>{formatCurrencyOrNA(getCalculatedBilledAmount(item))}</TableCell>
                                             <TableCell>{formatQuantity(item.originalQty ?? item.qty)}</TableCell>
                                             <TableCell sx={PRE_EDIT_GAP_SX}>{formatCurrencyOrNA(item.originalRate ?? item.rate)}</TableCell>
                                             <TableCell>

@@ -444,7 +444,6 @@ const ResultPage = () => {
                                 key={category.name}
                                 category={category}
                                 onUpdateItem={handleUpdateCategoryItem}
-                                isEditMode={isEditMode}
                             />
                         ))
                     )}

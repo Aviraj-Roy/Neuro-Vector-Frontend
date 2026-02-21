@@ -14,18 +14,6 @@ const toFiniteNumber = (value) => {
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : null;
 };
-const areNumbersEqual = (a, b) => {
-    if (a === null && b === null) return true;
-    if (a === null || b === null) return false;
-    return Math.abs(a - b) < 1e-9;
-};
-const hasQtyRateOverride = (item) => {
-    const currentQty = toFiniteNumber(item?.qty);
-    const currentRate = toFiniteNumber(item?.rate);
-    const originalQty = toFiniteNumber(item?.originalQty ?? item?.qty);
-    const originalRate = toFiniteNumber(item?.originalRate ?? item?.rate);
-    return !areNumbersEqual(currentQty, originalQty) || !areNumbersEqual(currentRate, originalRate);
-};
 
 const getTieupRateValue = (item) => {
     const tieup = toFiniteNumber(item?.tieupRate);
@@ -41,15 +29,11 @@ const withDerivedAmounts = (parsedResult) => {
             ...category,
             items: (category.items || []).map((item) => {
                 const qty = toFiniteNumber(item?.qty);
-                const rate = toFiniteNumber(item?.rate);
                 const tieupRate = getTieupRateValue(item);
-                const shouldUseComputedBilled = hasQtyRateOverride(item);
                 const baseBilled = toFiniteNumber(item?.originalBilledAmount ?? item?.billedAmount);
                 return {
                     ...item,
-                    billedAmount: shouldUseComputedBilled && qty !== null && rate !== null
-                        ? qty * rate
-                        : baseBilled,
+                    billedAmount: baseBilled,
                     amountToBePaid: qty !== null && tieupRate !== null ? qty * tieupRate : item?.amountToBePaid ?? null,
                 };
             }),
